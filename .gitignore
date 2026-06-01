@@ -1,0 +1,48 @@
+.DS_Store
+node_modules
+/build
+/.svelte-kit
+/package
+.env
+.env.*
+!.env.example
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+# dependencies
+node_modules/
+
+# SvelteKit / Vite
+.svelte-kit/
+.vite/
+dist/
+build/
+
+# Tauri / Rust build output
+src-tauri/target/
+
+# env / local config
+.env
+.env.*
+!.env.example
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Siglock local/debug runtime output
+captures/
+debug/
+app_data/
+siglock.json
+last_capture.png
+last_preprocessed.png
+src-tauri/captures/
+src-tauri/debug/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

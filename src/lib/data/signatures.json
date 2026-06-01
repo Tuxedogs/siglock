@@ -1,0 +1,809 @@
+[
+  {
+    "materialName": "Agricium",
+    "category": "Mineable",
+    "signatures": [
+      {
+        "rockCount": 1,
+        "value": 3885
+      },
+      {
+        "rockCount": 2,
+        "value": 7770
+      },
+      {
+        "rockCount": 3,
+        "value": 11655
+      },
+      {
+        "rockCount": 4,
+        "value": 15540
+      },
+      {
+        "rockCount": 5,
+        "value": 19425
+      }
+    ],
+    "notes": ""
+  },
+  {
+    "materialName": "Aluminium",
+    "category": "Mineable",
+    "signatures": [
+      {
+        "rockCount": 1,
+        "value": 4285
+      },
+      {
+        "rockCount": 2,
+        "value": 8570
+      },
+      {
+        "rockCount": 3,
+        "value": 12855
+      },
+      {
+        "rockCount": 4,
+        "value": 17140
+      },
+      {
+        "rockCount": 5,
+        "value": 21425
+      },
+      {
+        "rockCount": 6,
+        "value": 25710
+      }
+    ],
+    "notes": ""
+  },
+  {
+    "materialName": "Aslarite",
+    "category": "Mineable",
+    "signatures": [
+      {
+        "rockCount": 1,
+        "value": 3840
+      },
+      {
+        "rockCount": 2,
+        "value": 7680
+      },
+      {
+        "rockCount": 3,
+        "value": 11520
+      },
+      {
+        "rockCount": 4,
+        "value": 15360
+      },
+      {
+        "rockCount": 5,
+        "value": 19200
+      }
+    ],
+    "notes": ""
+  },
+  {
+    "materialName": "Beryl",
+    "category": "Mineable",
+    "signatures": [
+      {
+        "rockCount": 1,
+        "value": 3540
+      },
+      {
+        "rockCount": 2,
+        "value": 7080
+      },
+      {
+        "rockCount": 3,
+        "value": 10620
+      },
+      {
+        "rockCount": 4,
+        "value": 14160
+      }
+    ],
+    "notes": ""
+  },
+  {
+    "materialName": "Bexalite",
+    "category": "Mineable",
+    "signatures": [
+      {
+        "rockCount": 1,
+        "value": 3600
+      },
+      {
+        "rockCount": 2,
+        "value": 7200
+      },
+      {
+        "rockCount": 3,
+        "value": 10800
+      },
+      {
+        "rockCount": 4,
+        "value": 14400
+      }
+    ],
+    "notes": ""
+  },
+  {
+    "materialName": "Borase",
+    "category": "Mineable",
+    "signatures": [
+      {
+        "rockCount": 1,
+        "value": 3570
+      },
+      {
+        "rockCount": 2,
+        "value": 7140
+      },
+      {
+        "rockCount": 3,
+        "value": 10710
+      },
+      {
+        "rockCount": 4,
+        "value": 14280
+      }
+    ],
+    "notes": ""
+  },
+  {
+    "materialName": "Copper",
+    "category": "Mineable",
+    "signatures": [
+      {
+        "rockCount": 1,
+        "value": 4240
+      },
+      {
+        "rockCount": 2,
+        "value": 8480
+      },
+      {
+        "rockCount": 3,
+        "value": 12720
+      },
+      {
+        "rockCount": 4,
+        "value": 16960
+      },
+      {
+        "rockCount": 5,
+        "value": 21200
+      },
+      {
+        "rockCount": 6,
+        "value": 25440
+      }
+    ],
+    "notes": ""
+  },
+  {
+    "materialName": "Corundum",
+    "category": "Mineable",
+    "signatures": [
+      {
+        "rockCount": 1,
+        "value": 4225
+      },
+      {
+        "rockCount": 2,
+        "value": 8450
+      },
+      {
+        "rockCount": 3,
+        "value": 12675
+      },
+      {
+        "rockCount": 4,
+        "value": 16900
+      },
+      {
+        "rockCount": 5,
+        "value": 21125
+      },
+      {
+        "rockCount": 6,
+        "value": 25350
+      }
+    ],
+    "notes": ""
+  },
+  {
+    "materialName": "FPS",
+    "category": "FPS",
+    "signatures": [
+      {
+        "rockCount": 1,
+        "value": 3000
+      },
+      {
+        "rockCount": 2,
+        "value": 6000
+      },
+      {
+        "rockCount": 3,
+        "value": 9000
+      },
+      {
+        "rockCount": 4,
+        "value": 12000
+      },
+      {
+        "rockCount": 5,
+        "value": 15000
+      },
+      {
+        "rockCount": 6,
+        "value": 18000
+      },
+      {
+        "rockCount": 7,
+        "value": 21000
+      },
+      {
+        "rockCount": 8,
+        "value": 24000
+      },
+      {
+        "rockCount": 9,
+        "value": 27000
+      },
+      {
+        "rockCount": 10,
+        "value": 30000
+      }
+    ],
+    "notes": ""
+  },
+  {
+    "materialName": "Gold",
+    "category": "Mineable",
+    "signatures": [
+      {
+        "rockCount": 1,
+        "value": 3585
+      },
+      {
+        "rockCount": 2,
+        "value": 7170
+      },
+      {
+        "rockCount": 3,
+        "value": 10755
+      },
+      {
+        "rockCount": 4,
+        "value": 14340
+      }
+    ],
+    "notes": ""
+  },
+  {
+    "materialName": "Heph",
+    "category": "Mineable",
+    "signatures": [
+      {
+        "rockCount": 1,
+        "value": 4180
+      },
+      {
+        "rockCount": 2,
+        "value": 8360
+      },
+      {
+        "rockCount": 3,
+        "value": 12540
+      },
+      {
+        "rockCount": 4,
+        "value": 16720
+      },
+      {
+        "rockCount": 5,
+        "value": 20900
+      },
+      {
+        "rockCount": 6,
+        "value": 25080
+      }
+    ],
+    "notes": "Short label for Hephaestanite."
+  },
+  {
+    "materialName": "Ice",
+    "category": "Mineable",
+    "signatures": [
+      {
+        "rockCount": 1,
+        "value": 4300
+      },
+      {
+        "rockCount": 2,
+        "value": 8600
+      },
+      {
+        "rockCount": 3,
+        "value": 12900
+      },
+      {
+        "rockCount": 4,
+        "value": 17200
+      },
+      {
+        "rockCount": 5,
+        "value": 21500
+      },
+      {
+        "rockCount": 6,
+        "value": 25800
+      }
+    ],
+    "notes": ""
+  },
+  {
+    "materialName": "Iron",
+    "category": "Mineable",
+    "signatures": [
+      {
+        "rockCount": 1,
+        "value": 4270
+      },
+      {
+        "rockCount": 2,
+        "value": 8540
+      },
+      {
+        "rockCount": 3,
+        "value": 12810
+      },
+      {
+        "rockCount": 4,
+        "value": 17080
+      },
+      {
+        "rockCount": 5,
+        "value": 21350
+      },
+      {
+        "rockCount": 6,
+        "value": 25620
+      }
+    ],
+    "notes": ""
+  },
+  {
+    "materialName": "Laranite",
+    "category": "Mineable",
+    "signatures": [
+      {
+        "rockCount": 1,
+        "value": 3825
+      },
+      {
+        "rockCount": 2,
+        "value": 7650
+      },
+      {
+        "rockCount": 3,
+        "value": 11475
+      },
+      {
+        "rockCount": 4,
+        "value": 15300
+      },
+      {
+        "rockCount": 5,
+        "value": 19125
+      }
+    ],
+    "notes": ""
+  },
+  {
+    "materialName": "Lindinium",
+    "category": "Mineable",
+    "signatures": [
+      {
+        "rockCount": 1,
+        "value": 3400
+      },
+      {
+        "rockCount": 2,
+        "value": 6800
+      },
+      {
+        "rockCount": 3,
+        "value": 10200
+      }
+    ],
+    "notes": ""
+  },
+  {
+    "materialName": "Ouratite",
+    "category": "Mineable",
+    "signatures": [
+      {
+        "rockCount": 1,
+        "value": 3370
+      },
+      {
+        "rockCount": 2,
+        "value": 6740
+      },
+      {
+        "rockCount": 3,
+        "value": 10110
+      }
+    ],
+    "notes": ""
+  },
+  {
+    "materialName": "Quantainium",
+    "category": "Mineable",
+    "signatures": [
+      {
+        "rockCount": 1,
+        "value": 3170
+      },
+      {
+        "rockCount": 2,
+        "value": 6340
+      }
+    ],
+    "notes": "Legendary rock type. Only single or double rock signatures should be included."
+  },
+  {
+    "materialName": "Quartz",
+    "category": "Mineable",
+    "signatures": [
+      {
+        "rockCount": 1,
+        "value": 4210
+      },
+      {
+        "rockCount": 2,
+        "value": 8420
+      },
+      {
+        "rockCount": 3,
+        "value": 12630
+      },
+      {
+        "rockCount": 4,
+        "value": 16840
+      },
+      {
+        "rockCount": 5,
+        "value": 21050
+      },
+      {
+        "rockCount": 6,
+        "value": 25260
+      }
+    ],
+    "notes": ""
+  },
+  {
+    "materialName": "Riccite",
+    "category": "Mineable",
+    "signatures": [
+      {
+        "rockCount": 1,
+        "value": 3385
+      },
+      {
+        "rockCount": 2,
+        "value": 6770
+      },
+      {
+        "rockCount": 3,
+        "value": 10155
+      }
+    ],
+    "notes": ""
+  },
+  {
+    "materialName": "ROC Mineable",
+    "category": "Vehicle",
+    "signatures": [
+      {
+        "rockCount": 1,
+        "value": 4000
+      },
+      {
+        "rockCount": 2,
+        "value": 8000
+      },
+      {
+        "rockCount": 3,
+        "value": 12000
+      },
+      {
+        "rockCount": 4,
+        "value": 16000
+      },
+      {
+        "rockCount": 5,
+        "value": 20000
+      },
+      {
+        "rockCount": 6,
+        "value": 24000
+      },
+      {
+        "rockCount": 7,
+        "value": 28000
+      }
+    ],
+    "notes": ""
+  },
+  {
+    "materialName": "Salvage",
+    "category": "Salvage",
+    "signatures": [
+      {
+        "rockCount": 1,
+        "value": 2000
+      },
+      {
+        "rockCount": 2,
+        "value": 4000
+      },
+      {
+        "rockCount": 3,
+        "value": 6000
+      },
+      {
+        "rockCount": 4,
+        "value": 8000
+      },
+      {
+        "rockCount": 5,
+        "value": 10000
+      },
+      {
+        "rockCount": 6,
+        "value": 12000
+      },
+      {
+        "rockCount": 7,
+        "value": 14000
+      },
+      {
+        "rockCount": 8,
+        "value": 16000
+      },
+      {
+        "rockCount": 9,
+        "value": 18000
+      },
+      {
+        "rockCount": 10,
+        "value": 20000
+      },
+      {
+        "rockCount": 11,
+        "value": 22000
+      },
+      {
+        "rockCount": 12,
+        "value": 24000
+      },
+      {
+        "rockCount": 13,
+        "value": 26000
+      },
+      {
+        "rockCount": 14,
+        "value": 28000
+      },
+      {
+        "rockCount": 15,
+        "value": 30000
+      }
+    ],
+    "notes": ""
+  },
+  {
+    "materialName": "Savrillium",
+    "category": "Mineable",
+    "signatures": [
+      {
+        "rockCount": 1,
+        "value": 3200
+      },
+      {
+        "rockCount": 2,
+        "value": 6400
+      }
+    ],
+    "notes": ""
+  },
+  {
+    "materialName": "Silicon",
+    "category": "Mineable",
+    "signatures": [
+      {
+        "rockCount": 1,
+        "value": 4255
+      },
+      {
+        "rockCount": 2,
+        "value": 8510
+      },
+      {
+        "rockCount": 3,
+        "value": 12765
+      },
+      {
+        "rockCount": 4,
+        "value": 17020
+      },
+      {
+        "rockCount": 5,
+        "value": 21275
+      },
+      {
+        "rockCount": 6,
+        "value": 25530
+      }
+    ],
+    "notes": ""
+  },
+  {
+    "materialName": "Stileron",
+    "category": "Mineable",
+    "signatures": [
+      {
+        "rockCount": 1,
+        "value": 3185
+      },
+      {
+        "rockCount": 2,
+        "value": 6370
+      }
+    ],
+    "notes": ""
+  },
+  {
+    "materialName": "Taranite",
+    "category": "Mineable",
+    "signatures": [
+      {
+        "rockCount": 1,
+        "value": 3555
+      },
+      {
+        "rockCount": 2,
+        "value": 7110
+      },
+      {
+        "rockCount": 3,
+        "value": 10665
+      },
+      {
+        "rockCount": 4,
+        "value": 14220
+      }
+    ],
+    "notes": ""
+  },
+  {
+    "materialName": "Tin",
+    "category": "Mineable",
+    "signatures": [
+      {
+        "rockCount": 1,
+        "value": 4195
+      },
+      {
+        "rockCount": 2,
+        "value": 8390
+      },
+      {
+        "rockCount": 3,
+        "value": 12585
+      },
+      {
+        "rockCount": 4,
+        "value": 16780
+      },
+      {
+        "rockCount": 5,
+        "value": 20975
+      },
+      {
+        "rockCount": 6,
+        "value": 25170
+      }
+    ],
+    "notes": ""
+  },
+  {
+    "materialName": "Titanium",
+    "category": "Mineable",
+    "signatures": [
+      {
+        "rockCount": 1,
+        "value": 3855
+      },
+      {
+        "rockCount": 2,
+        "value": 7710
+      },
+      {
+        "rockCount": 3,
+        "value": 11565
+      },
+      {
+        "rockCount": 4,
+        "value": 15420
+      },
+      {
+        "rockCount": 5,
+        "value": 19275
+      }
+    ],
+    "notes": ""
+  },
+  {
+    "materialName": "Torite",
+    "category": "Mineable",
+    "signatures": [
+      {
+        "rockCount": 1,
+        "value": 3900
+      },
+      {
+        "rockCount": 2,
+        "value": 7800
+      },
+      {
+        "rockCount": 3,
+        "value": 11700
+      },
+      {
+        "rockCount": 4,
+        "value": 15600
+      },
+      {
+        "rockCount": 5,
+        "value": 19500
+      }
+    ],
+    "notes": ""
+  },
+  {
+    "materialName": "Tungsten",
+    "category": "Mineable",
+    "signatures": [
+      {
+        "rockCount": 1,
+        "value": 3870
+      },
+      {
+        "rockCount": 2,
+        "value": 7740
+      },
+      {
+        "rockCount": 3,
+        "value": 11610
+      },
+      {
+        "rockCount": 4,
+        "value": 15480
+      },
+      {
+        "rockCount": 5,
+        "value": 19350
+      }
+    ],
+    "notes": ""
+  }
+]
