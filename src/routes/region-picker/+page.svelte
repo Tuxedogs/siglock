@@ -94,17 +94,6 @@
   }
 
   onMount(async () => {
-    console.log("[RegionPicker] picker mounted");
-
-    const win = getCurrentWindow();
-    try {
-      const pos = await win.outerPosition();
-      const size = await win.outerSize();
-      console.log(`[RegionPicker] dimensions: ${size.width}x${size.height} at (${pos.x}, ${pos.y})`);
-    } catch (e) {
-      console.log("[RegionPicker] could not read window size/position:", e);
-    }
-
     document.addEventListener('keydown', handleKey);
     document.addEventListener('mousedown', onMouseDown);
     document.addEventListener('mousemove', onMouseMove);

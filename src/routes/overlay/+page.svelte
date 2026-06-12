@@ -2,7 +2,7 @@
   import { onDestroy, onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-  import { loadSettings, type SigLockSettings } from '$lib/settings';
+  import { loadSettingsReadOnly, type SigLockSettings } from '$lib/settings';
 
   type OverlayMatch = {
     key: string;
@@ -61,7 +61,7 @@
   });
 
   onMount(async () => {
-    settings = await loadSettings();
+    settings = await loadSettingsReadOnly();
     unlisteners.push(await listen<SigLockSettings>('overlay-settings-updated', (event) => settings = event.payload));
     unlisteners.push(await listen<{ matches: OverlayMatch[] }>('overlay-result-updated', (event) => matches = event.payload.matches));
     unlisteners.push(await listen<boolean>('overlay-setup-mode-changed', (event) => setupMode = event.payload));

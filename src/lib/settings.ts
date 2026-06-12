@@ -67,6 +67,11 @@ export async function loadSettings(): Promise<SigLockSettings> {
   return settings;
 }
 
+export async function loadSettingsReadOnly(): Promise<SigLockSettings> {
+  const readOnlyStore = await Store.load('settings.json', { defaults: { settings: DEFAULT_SETTINGS }, autoSave: false });
+  return sanitizeSettings(await readOnlyStore.get('settings'));
+}
+
 export async function saveSettings(settings: SigLockSettings): Promise<void> {
   if (!store) store = await Store.load('settings.json', { defaults: { settings: DEFAULT_SETTINGS }, autoSave: 250 });
   await store.set('settings', sanitizeSettings(settings));

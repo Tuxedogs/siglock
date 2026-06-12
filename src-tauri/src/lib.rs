@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::time::Duration;
-use tauri::{Emitter, LogicalPosition, LogicalSize, Manager, Position, Size, State};
+use tauri::{Emitter, LogicalPosition, LogicalSize, Manager, PhysicalPosition, Position, Size, State, WindowEvent};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use tokio::time::sleep;
 
@@ -95,6 +95,10 @@ fn get_app_data_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 fn get_debug_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let base = get_app_data_dir(app)?;
     Ok(base.join("siglock").join("debug"))
+}
+
+fn get_native_settings_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    Ok(get_app_data_dir(app)?.join("native-settings.json"))
 }
 
 /// Resolves the Tesseract executable path by trying candidates in priority order
@@ -291,6 +295,43 @@ fn default_state() -> AppStateInner {
     }
 }
 
+#[derive(Serialize, Deserialize, Default, Clone, Debug)]
+struct NativeSettings {
+    region: Option<ScanRegion>,
+    overlay_position: Option<(i32, i32)>,
+}
+
+fn load_native_settings(app: &tauri::AppHandle) -> NativeSettings {
+    let Ok(path) = get_native_settings_path(app) else {
+        return NativeSettings::default();
+    };
+    std::fs::read_to_string(path)
+        .ok()
+        .and_then(|value| serde_json::from_str(&value).ok())
+        .unwrap_or_default()
+}
+
+fn save_native_settings(app: &tauri::AppHandle, settings: &NativeSettings) -> Result<(), String> {
+    let path = get_native_settings_path(app)?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let value = serde_json::to_vec_pretty(settings).map_err(|e| e.to_string())?;
+    std::fs::write(path, value).map_err(|e| e.to_string())
+}
+
+fn save_region(app: &tauri::AppHandle, region: Option<ScanRegion>) -> Result<(), String> {
+    let mut settings = load_native_settings(app);
+    settings.region = region;
+    save_native_settings(app, &settings)
+}
+
+fn save_overlay_position(app: &tauri::AppHandle, position: PhysicalPosition<i32>) -> Result<(), String> {
+    let mut settings = load_native_settings(app);
+    settings.overlay_position = Some((position.x, position.y));
+    save_native_settings(app, &settings)
+}
+
 fn clamp_scan_interval(interval_ms: u64) -> u64 {
     interval_ms.clamp(1000, 4000)
 }
@@ -369,6 +410,7 @@ fn resize_overlay_to_content(app: tauri::AppHandle, width: f64, height: f64, set
 fn reset_overlay_position(app: tauri::AppHandle) -> Result<(), String> {
     let window = app.get_webview_window("overlay").ok_or_else(|| "Overlay window not found".to_string())?;
     window.set_position(Position::Logical(LogicalPosition::new(80.0, 120.0))).map_err(|e| e.to_string())?;
+    save_overlay_position(&app, window.outer_position().map_err(|e| e.to_string())?)?;
     window.set_size(Size::Logical(LogicalSize::new(196.0, 48.0))).map_err(|e| e.to_string())
 }
 
@@ -474,10 +516,11 @@ fn get_app_state(state: State<'_, AppState>) -> Result<serde_json::Value, String
 async fn set_crop_region(
     region: ScanRegion,
     state: State<'_, AppState>,
+    app: tauri::AppHandle,
 ) -> Result<(), String> {
     let mut s = state.lock().unwrap();
-    s.region = Some(region);
-    Ok(())
+    s.region = Some(region.clone());
+    save_region(&app, Some(region))
 }
 
 #[tauri::command]
@@ -487,10 +530,10 @@ fn get_crop_region(state: State<'_, AppState>) -> Result<Option<ScanRegion>, Str
 }
 
 #[tauri::command]
-async fn clear_crop_region(state: State<'_, AppState>) -> Result<(), String> {
+async fn clear_crop_region(state: State<'_, AppState>, app: tauri::AppHandle) -> Result<(), String> {
     let mut s = state.lock().unwrap();
     s.region = None;
-    Ok(())
+    save_region(&app, None)
 }
 
 #[tauri::command]
@@ -1155,9 +1198,16 @@ pub fn run() {
             check_tesseract
         ])
         .setup(move |app| {
+            let native_settings = load_native_settings(&app.handle());
+            if let Ok(mut current_state) = state.lock() {
+                current_state.region = native_settings.region.clone();
+            }
             if let Some(overlay) = app.get_webview_window("overlay") {
                 let _ = overlay.set_always_on_top(true);
                 let _ = overlay.set_ignore_cursor_events(true);
+                if let Some((x, y)) = native_settings.overlay_position {
+                    let _ = overlay.set_position(Position::Physical(PhysicalPosition::new(x, y)));
+                }
             }
             start_scan_mouse_hook(app.handle().clone());
 
@@ -1167,10 +1217,14 @@ pub fn run() {
                 println!("[SigLock] Hotkeys registered: Ctrl+Shift+M (show/hide), Ctrl+Shift+O (toggle active)");
             }
 
-            // Active Scan is forced OFF on every launch (already default)
-            // Region persistence load can be added here once store trait is in scope on the handle.
-
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            if window.label() == "overlay" {
+                if let WindowEvent::Moved(position) = event {
+                    let _ = save_overlay_position(&window.app_handle(), *position);
+                }
+            }
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
