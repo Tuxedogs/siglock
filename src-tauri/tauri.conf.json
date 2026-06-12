@@ -13,15 +13,32 @@
     "windows": [
       {
         "title": "SigLock",
-        "width": 420,
-        "height": 560,
-        "minWidth": 360,
-        "minHeight": 420,
+        "width": 980,
+        "height": 720,
+        "minWidth": 680,
+        "minHeight": 520,
         "resizable": true,
         "decorations": false,
         "alwaysOnTop": false,
         "transparent": false,
         "center": true
+      },
+      {
+        "label": "overlay",
+        "title": "SigLock Overlay",
+        "url": "/overlay",
+        "width": 380,
+        "height": 190,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "focus": false,
+        "visible": true,
+        "center": false,
+        "x": 24,
+        "y": 24
       },
       {
         "label": "region-picker",

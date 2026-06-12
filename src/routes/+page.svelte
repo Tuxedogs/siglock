@@ -1,35 +1,41 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
+  import { emitTo, listen, type UnlistenFn } from '@tauri-apps/api/event';
+  import { getCurrentWindow } from '@tauri-apps/api/window';
+  import { isRegistered, register, unregister } from '@tauri-apps/plugin-global-shortcut';
   import { matchObservedValue, type MatchResult } from '$lib/data/signatures';
+  import { buildScanResultKey, isDuplicateResult, normalizeMaterial } from '$lib/scanDedupe';
+  import { DEFAULT_SETTINGS, loadSettings, saveSettings, type SigLockSettings } from '$lib/settings';
 
-  // State
-  let observed = $state("3885");   // Sample that hits exact in our tiny dataset
-  let tolerance = $state(25);
-  let matches = $state<MatchResult[]>([]);
-  let lastScanTime = $state<string | null>(null);
-  let lastScanSource = $state<"manual" | "ocr" | null>(null);
+  type Trigger = 'Manual' | 'Active';
+  type ScanStatus = 'matched' | 'no match' | 'failed' | 'skipped';
+  type HistoryEntry = {
+    id: number;
+    timestamp: string;
+    trigger: Trigger;
+    material: string;
+    rawValue: string;
+    confidence: number | null;
+    status: ScanStatus;
+    durationMs: number;
+    repeatCount: number;
+  };
+  type OverlayMatch = {
+    key: string;
+    material: string;
+    rockCount: number;
+    repeatCount: number;
+    updatedAt: string;
+  };
+  type LastAcceptedScan = {
+    key: string;
+    acceptedAt: number;
+    historyId: number;
+    overlayKeys: string[];
+  };
 
-  // Region + OCR state (synced with Rust)
-  let hasRegion = $state(false);
-  let regionInfo = $state<string | null>(null);
-  let activeScanOn = $state(false);
-  let overlayVisible = $state(true);
-  let ocrError = $state<string | null>(null);
-
-  // Guard to prevent overlapping scans
-  let isScanning = $state(false);
-
-  // Capture preview state (from Capture Test button)
-  let capturePreviewPath = $state<string | null>(null);
-  let capturePreviewUrl = $state<string | null>(null);
-  let lastCaptureInfo = $state<string | null>(null);
-
-  // ==================== OCR Debug / Tuning State ====================
-  let showDebug = $state(false);
-
-  // Current tunable config (dev only)
-  let ocrConfig = $state({
+  const ocrConfig = {
     upscale: 2,
     threshold_enabled: true,
     threshold: 200,
@@ -38,636 +44,543 @@
     sharpen: false,
     psm: 7,
     numeric_only: true,
-  });
+  };
 
-  // Latest debug info from last real scan
-  let debugRawText = $state("");
-  let debugNormalized = $state<number | null>(null);
-  let debugError = $state<string | null>(null);
-  let debugLastScan = $state<string | null>(null);
-  let debugCaptureSize = $state<string | null>(null);
-
-  // Paths to latest debug images (fixed names, overwritten each scan)
-  let debugRawPath = $state<string | null>(null);
-  let debugRawUrl = $state<string | null>(null);
-  let debugPreprocessedPath = $state<string | null>(null);
-  let debugPreprocessedUrl = $state<string | null>(null);
-
-  // Tesseract status
+  let settings = $state<SigLockSettings>({ ...DEFAULT_SETTINGS });
+  let settingsReady = $state(false);
+  let observed = $state('3885');
+  let tolerance = $state(25);
+  let matches = $state<MatchResult[]>([]);
+  let history = $state<HistoryEntry[]>([]);
+  let hasRegion = $state(false);
+  let regionInfo = $state<string | null>(null);
+  let activeScanOn = $state(false);
+  let overlayVisible = $state(true);
+  let overlaySetupMode = $state(false);
+  let overlayMatches = $state<OverlayMatch[]>([]);
+  let lastAcceptedScan: LastAcceptedScan | null = null;
+  let isScanning = $state(false);
+  let queuedTrigger = $state<Trigger | null>(null);
+  let scannerStatus = $state('Ready');
+  let ocrError = $state<string | null>(null);
   let tesseractStatus = $state<any>(null);
+  let lastScanTime = $state<string | null>(null);
+  let lastScanSummary = $state('Never scanned');
+  let capturingKeybind = $state(false);
+  let keybindError = $state<string | null>(null);
+  let capturePreviewUrl = $state<string | null>(null);
+  let debugResult = $state<any>(null);
+  let overlayError = $state<string | null>(null);
+  let unlisteners: UnlistenFn[] = [];
+  let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // Use the real JSON-driven matcher (no more Rust formula)
-  function runMatch() {
-    const cleaned = observed.replace(/[^0-9]/g, "");
-    const num = parseInt(cleaned, 10);
+  function persistSettings() {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(async () => {
+      try {
+        await saveSettings({ ...settings });
+        await emitTo('overlay', 'overlay-settings-updated', { ...settings });
+        overlayError = null;
+      } catch (error) {
+        overlayError = `Overlay settings update failed: ${String(error)}`;
+      }
+    }, 150);
+  }
 
-    if (!num || num < 100) {
-      matches = [];
-      return;
-    }
-
+  async function publishOverlayMatches() {
     try {
-      // This now calls the matcher in src/lib/data/signatures.ts
-      // which loads ONLY from src/lib/data/signatures.json
-      const result = matchObservedValue(num, tolerance);
-      matches = result;
-      lastScanTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      lastScanSource = "manual";
-    } catch (e) {
-      console.error("match failed", e);
-      matches = [];
+      await emitTo('overlay', 'overlay-result-updated', {
+        matches: overlayMatches.slice(0, 3),
+      });
+      overlayError = null;
+    } catch (error) {
+      overlayError = `Overlay result update failed: ${String(error)}`;
     }
   }
 
-  // Auto-match on input change (debounced feel via Svelte 5 runes)
-  $effect(() => {
-    const cleaned = observed.replace(/[^0-9]/g, "");
-    const num = parseInt(cleaned, 10);
-    if (num >= 100) {
-      runMatch();
+  function addOverlayMatches(nextMatches: MatchResult[], rawValue: string) {
+    const updatedAt = new Date().toISOString();
+    for (const match of [...nextMatches].reverse()) {
+      const key = `${normalizeMaterial(match.material)}|${match.rockCount}|${rawValue.replace(/\D/g, '')}`;
+      const existing = overlayMatches.find((item) => item.key === key);
+      const next: OverlayMatch = {
+        key,
+        material: match.material,
+        rockCount: match.rockCount,
+        repeatCount: (existing?.repeatCount ?? 0) + 1,
+        updatedAt,
+      };
+      overlayMatches = [next, ...overlayMatches.filter((item) => item !== existing)].slice(0, 3);
+    }
+    void publishOverlayMatches();
+  }
+
+  function incrementDuplicate(scan: LastAcceptedScan) {
+    const updatedAt = new Date().toISOString();
+    history = history.map((entry) => entry.id === scan.historyId
+      ? { ...entry, timestamp: updatedAt, repeatCount: entry.repeatCount + 1 }
+      : entry);
+    overlayMatches = overlayMatches.map((match) => scan.overlayKeys.includes(match.key)
+      ? { ...match, updatedAt, repeatCount: match.repeatCount + 1 }
+      : match);
+    void publishOverlayMatches();
+  }
+
+  function addHistory(entry: Omit<HistoryEntry, 'id' | 'repeatCount'>) {
+    const signature = `${entry.status}|${entry.material}|${entry.rawValue}`;
+    const first = history[0];
+    const firstSignature = first ? `${first.status}|${first.material}|${first.rawValue}` : '';
+    if (first && signature === firstSignature) {
+      history = [{ ...first, timestamp: entry.timestamp, trigger: entry.trigger, durationMs: entry.durationMs, repeatCount: first.repeatCount + 1 }, ...history.slice(1)];
     } else {
-      matches = [];
+      history = [{ ...entry, id: Date.now() + Math.random(), repeatCount: 1 }, ...history].slice(0, settings.rollingHistoryLimit);
     }
-  });
-
-  function clearInput() {
-    observed = "";
-    matches = [];
   }
 
-  function formatDelta(delta: number): string {
-    if (delta === 0) return "0";
-    return delta > 0 ? `+${delta}` : `${delta}`;
+  function runManualMatch() {
+    const value = Number.parseInt(observed.replace(/\D/g, ''), 10);
+    matches = value >= 100 ? matchObservedValue(value, tolerance) : [];
+    if (matches.length) addOverlayMatches(matches, String(value));
   }
-
-  // ==================== Region + OCR (new foundation) ====================
 
   async function refreshRegionStatus() {
     try {
-      const reg = await invoke<any | null>("get_crop_region");
-      hasRegion = !!reg;
-      if (reg) {
-        regionInfo = `${reg.width}×${reg.height} @ (${reg.x}, ${reg.y})`;
-      } else {
-        regionInfo = null;
-      }
-    } catch (e) {
+      const region = await invoke<any | null>('get_crop_region');
+      hasRegion = !!region;
+      regionInfo = region ? `${region.width}x${region.height} @ (${region.x}, ${region.y})` : null;
+    } catch {
       hasRegion = false;
       regionInfo = null;
     }
   }
 
-  async function setRegion() {
-    console.log("Opening region picker...");
-    ocrError = "Opening region picker...";
-    try {
-      await invoke("open_region_picker");
-      console.log("Region picker opened");
-      ocrError = "Region picker opened";  // Brief visible confirmation
-      // Clear the message quickly so it doesn't linger
-      setTimeout(() => {
-        if (ocrError === "Region picker opened") ocrError = null;
-      }, 1200);
-      // Poll for region update after picker closes
-      setTimeout(refreshRegionStatus, 800);
-      setTimeout(refreshRegionStatus, 1800);
-    } catch (e) {
-      const msg = "Failed to open region picker: " + String(e);
-      console.error(msg);
-      ocrError = msg;
-    }
-  }
-
-  async function clearRegion() {
-    try {
-      await invoke("clear_crop_region");
-      await refreshRegionStatus();
-    } catch (e) {
-      console.error(e);
-    }
-  }
-
-  // ==================== Shared Scan Result Processor (avoids duplication) ====================
-  async function processOcrResult(result: any) {
-    const err = result?.error || null;
-    debugError = err;
-    debugRawText = result?.raw_text || "";
-    debugNormalized = result?.normalized_value ?? null;
-    debugLastScan = result?.scanned_at || new Date().toISOString();
-    debugCaptureSize = (result?.capture_width && result?.capture_height)
-      ? `${result.capture_width}×${result.capture_height}`
-      : null;
-
-    // Update debug image paths (fixed latest files)
-    debugRawPath = result?.raw_crop_path || null;
-    debugPreprocessedPath = result?.preprocessed_path || null;
-
-    if (debugRawPath) {
-      const { convertFileSrc } = await import('@tauri-apps/api/core');
-      // Cache bust because file is always named last_capture.png
-      debugRawUrl = convertFileSrc(`${debugRawPath}?t=${Date.now()}`);
-    } else {
-      debugRawUrl = null;
-    }
-    if (debugPreprocessedPath) {
-      const { convertFileSrc } = await import('@tauri-apps/api/core');
-      debugPreprocessedUrl = convertFileSrc(`${debugPreprocessedPath}?t=${Date.now()}`);
-    } else {
-      debugPreprocessedUrl = null;
-    }
-
-    const normalized = result?.normalized_value;
-
-    // Special handling for Tesseract missing - surface clearly
-    if (err && err.toLowerCase().includes("tesseract not found")) {
-      ocrError = err;
-      // Do not set matches or lastScanSource in this case
-      return;
-    }
-
-    if (normalized) {
-      // Feed to the single JSON matcher
-      const matched = matchObservedValue(normalized, tolerance);
-      matches = matched;
-      lastScanTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      lastScanSource = "ocr";
-      ocrError = null;
-    } else if (err) {
-      ocrError = err;
-    } else {
-      ocrError = "No valid signature detected.";
-    }
-  }
-
-  async function performOcrScan() {
+  async function performScan(trigger: Trigger) {
     if (!hasRegion) {
-      ocrError = "No region selected. Click 'Set Region' first.";
+      scannerStatus = 'Scan skipped: set a region first.';
+      addHistory({ timestamp: new Date().toISOString(), trigger, material: 'No region', rawValue: '-', confidence: null, status: 'skipped', durationMs: 0 });
       return;
     }
-
     if (isScanning) {
-      // Skip to prevent overlapping OCR jobs
+      queuedTrigger = queuedTrigger ?? trigger;
+      scannerStatus = 'Scan queued: already scanning.';
+      addHistory({ timestamp: new Date().toISOString(), trigger, material: 'Already scanning', rawValue: '-', confidence: null, status: 'skipped', durationMs: 0 });
       return;
     }
 
     isScanning = true;
-
+    scannerStatus = `${trigger} scan started`;
+    const started = performance.now();
     try {
-      // Pass current dev config on every scan (Scan Now and Active Scan ticks)
-      const result = await invoke("scan_selected_region", { config: ocrConfig });
-      await processOcrResult(result);
-    } catch (e) {
-      ocrError = "OCR scan failed: " + String(e);
-      debugError = ocrError;
+      const result: any = await invoke('scan_selected_region', { config: ocrConfig });
+      debugResult = result;
+      const rawValue = result?.raw_text || (result?.normalized_value?.toString() ?? '-');
+      const durationMs = Math.round(performance.now() - started);
+      const normalized = result?.normalized_value;
+      const normalizedSignature = normalized?.toString() ?? rawValue.replace(/\D/g, '');
+      const nextMatches = normalized ? matchObservedValue(normalized, tolerance) : [];
+      matches = nextMatches;
+      ocrError = result?.error || null;
+      lastScanTime = new Date().toLocaleTimeString();
+
+      const status: ScanStatus = result?.error ? 'failed' : nextMatches.length ? 'matched' : 'no match';
+      const material = nextMatches.length ? nextMatches.map((match) => match.material).join(', ') : (result?.error || 'No match');
+      const confidence = nextMatches[0]?.confidence ?? result?.confidence ?? null;
+      lastScanSummary = status === 'matched' ? `${material} (${rawValue})` : `${status}: ${rawValue}`;
+      scannerStatus = `${trigger} scan ${status}`;
+      const timestamp = result?.scanned_at || new Date().toISOString();
+      if (status === 'matched') {
+        const now = Date.now();
+        const key = buildScanResultKey(nextMatches, normalizedSignature);
+        if (lastAcceptedScan && isDuplicateResult(lastAcceptedScan, key, now)) {
+          incrementDuplicate(lastAcceptedScan);
+          scannerStatus = trigger === 'Manual' ? 'Duplicate suppressed' : `${trigger} scan duplicate suppressed`;
+        } else {
+          addOverlayMatches(nextMatches, normalizedSignature);
+          addHistory({ timestamp, trigger, material, rawValue, confidence, status, durationMs });
+          lastAcceptedScan = {
+            key,
+            acceptedAt: now,
+            historyId: history[0].id,
+            overlayKeys: nextMatches.map((match) => `${normalizeMaterial(match.material)}|${match.rockCount}|${normalizedSignature}`),
+          };
+        }
+      } else {
+        addHistory({ timestamp, trigger, material, rawValue, confidence, status, durationMs });
+      }
+    } catch (error) {
+      const message = `OCR scan failed: ${String(error)}`;
+      ocrError = message;
+      scannerStatus = message;
+      addHistory({ timestamp: new Date().toISOString(), trigger, material: message, rawValue: '-', confidence: null, status: 'failed', durationMs: Math.round(performance.now() - started) });
     } finally {
       isScanning = false;
+      const followUp = queuedTrigger;
+      queuedTrigger = null;
+      if (followUp) void performScan(followUp);
     }
   }
 
-  // Public entry points that both use the shared processor
-  async function scanNow() {
-    matches = [];
-    await performOcrScan();
+  async function toggleActiveScan() {
+    try {
+      activeScanOn = await invoke<boolean>('toggle_active_scan');
+      scannerStatus = `Active Scan ${activeScanOn ? 'enabled' : 'disabled'}`;
+    } catch (error) {
+      scannerStatus = `Active Scan failed: ${String(error)}`;
+    }
   }
 
-  // Called by Active Scan timer ticks
-  let lastActiveScanError = $state<string | null>(null);
+  async function toggleOverlay() {
+    try {
+      overlayVisible = await invoke<boolean>('toggle_overlay_visibility');
+      overlayError = null;
+    } catch (error) {
+      overlayError = `Overlay visibility failed: ${String(error)}`;
+    }
+  }
 
-  async function runActiveScanTick() {
-    if (!activeScanOn || !hasRegion || isScanning) return;
+  async function toggleOverlaySetupMode() {
+    try {
+      overlaySetupMode = await invoke<boolean>('set_overlay_setup_mode', { enabled: !overlaySetupMode });
+      overlayError = null;
+    } catch (error) {
+      overlayError = `Overlay setup mode failed: ${String(error)}`;
+    }
+  }
 
-    await performOcrScan();
+  async function resetOverlayPosition() {
+    try {
+      await invoke('reset_overlay_position');
+      overlayError = null;
+      scannerStatus = 'Overlay position reset to x=80, y=120';
+    } catch (error) {
+      overlayError = `Overlay position reset failed: ${String(error)}`;
+    }
+  }
 
-    // Error safety: only update UI error if it actually changed (avoid spamming every 3s)
-    if (debugError && debugError !== lastActiveScanError) {
-      lastActiveScanError = debugError;
-      ocrError = debugError;
+  function startMainWindowDrag(event: MouseEvent) {
+    if (event.button === 0) void getCurrentWindow().startDragging();
+  }
 
-      // If Tesseract is missing, automatically disable Active Scan to prevent hammering
-      if (debugError.toLowerCase().includes("tesseract not found")) {
-        activeScanOn = false;
-        ocrError = "Tesseract not found. Active Scan has been disabled. Install Tesseract and re-enable Active Scan.";
+  async function updateInterval() {
+    settings.activeScanIntervalMs = Math.min(4000, Math.max(1000, Math.round(settings.activeScanIntervalMs / 1000) * 1000));
+    settings.activeScanIntervalMs = await invoke<number>('set_scan_interval', { intervalMs: settings.activeScanIntervalMs });
+    scannerStatus = `Active interval set to ${settings.activeScanIntervalMs / 1000}s`;
+    persistSettings();
+  }
+
+  function isMouseBinding(binding: string) {
+    return ['Middle Mouse', 'Mouse4', 'Mouse5'].includes(binding);
+  }
+
+  async function applyScanKeybind(binding: string, previous: string) {
+    if (binding === previous) return;
+    if (isMouseBinding(binding)) {
+      await invoke('set_scan_now_mouse_binding', { binding });
+      try {
+        if (!isMouseBinding(previous) && await isRegistered(previous)) await unregister(previous);
+      } catch (error) {
+        await invoke('set_scan_now_mouse_binding', { binding: null });
+        throw error;
       }
-    } else if (!debugError) {
-      lastActiveScanError = null;
-    }
-  }
-
-  // ==================== Real Region Capture Test (debug only) ====================
-  async function captureTest() {
-    lastCaptureInfo = null;
-    capturePreviewPath = null;
-    capturePreviewUrl = null;
-
-    if (!hasRegion) {
-      lastCaptureInfo = "Set a region first.";
       return;
     }
 
+    await register(binding, (event) => {
+      if (event.state === 'Pressed' && !capturingKeybind) void performScan('Manual');
+    });
     try {
-      const result: any = await invoke("capture_region_preview");
-      console.log("[CaptureTest] Raw result from Rust:", result);
-
-      if (!result.success) {
-        lastCaptureInfo = result.error || "Capture failed.";
-        return;
+      await invoke('set_scan_now_mouse_binding', { binding: null });
+      if (!isMouseBinding(previous) && await isRegistered(previous)) await unregister(previous);
+    } catch (error) {
+      await unregister(binding).catch(() => {});
+      if (!isMouseBinding(previous) && !await isRegistered(previous)) {
+        await register(previous, (event) => {
+          if (event.state === 'Pressed' && !capturingKeybind) void performScan('Manual');
+        }).catch(() => {});
       }
-
-      lastCaptureInfo = `${result.width}×${result.height} captured at ${new Date().toLocaleTimeString()}`;
-
-      // Prefer base64 data URL returned from Rust (most reliable for dev/debug)
-      if (result.preview_data_url) {
-        capturePreviewUrl = result.preview_data_url;
-        capturePreviewPath = result.image_path || null;
-        console.log("[CaptureTest] Using base64 preview_data_url from Rust");
-        return;
-      }
-
-      // Fallback: use convertFileSrc + cache busting
-      if (result.image_path) {
-        capturePreviewPath = result.image_path;
-        const { convertFileSrc } = await import('@tauri-apps/api/core');
-        const cacheBusted = `${result.image_path}?t=${Date.now()}`;
-        capturePreviewUrl = convertFileSrc(cacheBusted);
-        console.log("[CaptureTest] Final img src via convertFileSrc:", capturePreviewUrl);
-      } else {
-        lastCaptureInfo = "Capture succeeded but no preview path returned.";
-      }
-    } catch (e) {
-      lastCaptureInfo = "Capture test failed: " + String(e);
-      console.error("[CaptureTest] Error:", e);
+      throw error;
     }
   }
 
-  async function checkTesseract() {
+  function keyName(event: KeyboardEvent): string | null {
+    if (['Control', 'Shift', 'Alt', 'Meta', 'Escape'].includes(event.key)) return null;
+    if (/^F([1-9]|1[0-9]|2[0-4])$/.test(event.key)) return event.key;
+    if (/^Numpad[0-9]$/.test(event.code)) return `Numpad${event.code.slice(-1)}`;
+    if (/^Key[A-Z]$/.test(event.code)) return event.code.slice(3);
+    if (/^Digit[0-9]$/.test(event.code)) return event.code.slice(5);
+    const allowed: Record<string, string> = {
+      Space: 'Space', Enter: 'Enter', Tab: 'Tab', Backspace: 'Backspace', Insert: 'Insert', Delete: 'Delete',
+      Home: 'Home', End: 'End', PageUp: 'PageUp', PageDown: 'PageDown', ArrowUp: 'ArrowUp',
+      ArrowDown: 'ArrowDown', ArrowLeft: 'ArrowLeft', ArrowRight: 'ArrowRight', NumpadAdd: 'NumpadAdd',
+      NumpadSubtract: 'NumpadSubtract', NumpadMultiply: 'NumpadMultiply', NumpadDivide: 'NumpadDivide',
+      NumpadDecimal: 'NumpadDecimal', NumpadEnter: 'NumpadEnter', BracketLeft: 'BracketLeft',
+      BracketRight: 'BracketRight', Semicolon: 'Semicolon', Comma: 'Comma', Period: 'Period',
+      Slash: 'Slash', Backslash: 'Backslash', Quote: 'Quote', Minus: 'Minus', Equal: 'Equal', Backquote: 'Backquote',
+    };
+    return allowed[event.code] ?? null;
+  }
+
+  async function captureKeybind(event: KeyboardEvent) {
+    if (!capturingKeybind) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.key === 'Escape') {
+      capturingKeybind = false;
+      return;
+    }
+    const key = keyName(event);
+    const modifiers = [event.ctrlKey && 'Ctrl', event.altKey && 'Alt', event.shiftKey && 'Shift', event.metaKey && 'Super'].filter(Boolean);
+    if (!key) {
+      keybindError = 'That key is not supported. Press Escape to cancel.';
+      return;
+    }
+    const next = [...modifiers, key].join('+');
     try {
-      tesseractStatus = await invoke("check_tesseract");
-    } catch (e) {
-      tesseractStatus = { available: false, error: String(e) };
+      await applyScanKeybind(next, settings.scanNowKeybind);
+      settings.scanNowKeybind = next;
+      persistSettings();
+      keybindError = null;
+      scannerStatus = `Scan Now keybind set to ${next}`;
+      capturingKeybind = false;
+    } catch (error) {
+      keybindError = `Could not register ${next}: ${String(error)}`;
     }
   }
 
-  // Toggle Active Scan via Rust (keeps Rust state and frontend in sync)
-  async function toggleActiveScan() {
+  async function captureMouseKeybind(event: MouseEvent) {
+    if (!capturingKeybind) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const binding = event.button === 1 ? 'Middle Mouse' : event.button === 3 ? 'Mouse4' : event.button === 4 ? 'Mouse5' : null;
+    if (!binding) {
+      keybindError = event.button <= 2 ? 'Left click and right click cannot be bound.' : 'That mouse button is not supported.';
+      return;
+    }
     try {
-      const newState: boolean = await invoke("toggle_active_scan");
-      activeScanOn = newState;
-
-      if (!newState) {
-        // Stop immediately
-        ocrError = null;
-        lastActiveScanError = null;
-      }
-    } catch (e) {
-      ocrError = "Failed to toggle Active Scan: " + String(e);
+      await applyScanKeybind(binding, settings.scanNowKeybind);
+      settings.scanNowKeybind = binding;
+      persistSettings();
+      keybindError = null;
+      scannerStatus = `Scan Now keybind set to ${binding}`;
+      capturingKeybind = false;
+    } catch (error) {
+      keybindError = `Could not register ${binding}: ${String(error)}`;
     }
   }
 
-  // Load region status on mount + listen for Active Scan timer ticks
+  async function resetKeybind() {
+    try {
+      await applyScanKeybind(DEFAULT_SETTINGS.scanNowKeybind, settings.scanNowKeybind);
+      settings.scanNowKeybind = DEFAULT_SETTINGS.scanNowKeybind;
+      persistSettings();
+      keybindError = null;
+    } catch (error) {
+      keybindError = String(error);
+    }
+  }
+
+  function keybindLabel(binding: string) {
+    return binding.replace(/^Numpad([0-9])$/, 'Numpad $1');
+  }
+
+  async function setRegion() {
+    scannerStatus = 'Opening region picker...';
+    try {
+      await invoke('open_region_picker');
+      setTimeout(refreshRegionStatus, 900);
+      setTimeout(refreshRegionStatus, 1800);
+    } catch (error) {
+      scannerStatus = `Region picker failed: ${String(error)}`;
+    }
+  }
+
+  async function clearRegion() {
+    await invoke('clear_crop_region');
+    await refreshRegionStatus();
+  }
+
+  async function captureTest() {
+    try {
+      const result: any = await invoke('capture_region_preview');
+      capturePreviewUrl = result?.preview_data_url ?? null;
+      scannerStatus = result?.success ? `Captured ${result.width}x${result.height}` : (result?.error || 'Capture failed');
+    } catch (error) {
+      scannerStatus = `Capture failed: ${String(error)}`;
+    }
+  }
+
   onMount(async () => {
-    refreshRegionStatus();
-    checkTesseract(); // one-time availability check on startup
-
-    // Listen for timer heartbeats from Rust.
-    // Active Scan performs a real scan (via the shared path) on each valid tick.
-    const { listen } = await import('@tauri-apps/api/event');
-
-    await listen('timer-scan-tick', () => {
-      if (activeScanOn && hasRegion && !isScanning) {
-        runActiveScanTick();
+    document.addEventListener('keydown', captureKeybind, true);
+    document.addEventListener('mousedown', captureMouseKeybind, true);
+    try {
+      settings = await loadSettings();
+    } catch (error) {
+      keybindError = `Settings load warning; using safe defaults: ${String(error)}`;
+      settings = { ...DEFAULT_SETTINGS };
+    }
+    settingsReady = true;
+    try {
+      await invoke('set_scan_interval', { intervalMs: settings.activeScanIntervalMs });
+      if (isMouseBinding(settings.scanNowKeybind)) {
+        await invoke('set_scan_now_mouse_binding', { binding: settings.scanNowKeybind });
+      } else if (!await isRegistered(settings.scanNowKeybind)) {
+        await register(settings.scanNowKeybind, (event) => {
+          if (event.state === 'Pressed' && !capturingKeybind) void performScan('Manual');
+        });
       }
-    });
-
-    // Sync with Rust when Active Scan is toggled (e.g. via hotkey)
-    await listen('active-scan-toggled', (event: any) => {
-      activeScanOn = !!event.payload;
-      if (!activeScanOn) {
-        lastActiveScanError = null;
-        isScanning = false;
+    } catch (error) {
+      if (settings.scanNowKeybind !== DEFAULT_SETTINGS.scanNowKeybind) {
+        try {
+          await applyScanKeybind(DEFAULT_SETTINGS.scanNowKeybind, settings.scanNowKeybind);
+          settings.scanNowKeybind = DEFAULT_SETTINGS.scanNowKeybind;
+          await saveSettings({ ...settings });
+          keybindError = `Saved keybind was unavailable; using ${DEFAULT_SETTINGS.scanNowKeybind}.`;
+        } catch (fallbackError) {
+          keybindError = `Keybind registration warning: ${String(fallbackError)}`;
+        }
+      } else {
+        keybindError = `Keybind registration warning: ${String(error)}`;
       }
-    });
+    }
+
+    await refreshRegionStatus();
+    try {
+      tesseractStatus = await invoke('check_tesseract');
+      const appState: any = await invoke('get_app_state');
+      activeScanOn = !!appState?.active_scan_enabled;
+      overlayVisible = !!appState?.overlay_visible;
+      overlaySetupMode = !!appState?.overlay_setup_mode;
+    } catch (error) {
+      scannerStatus = `Backend check failed: ${String(error)}`;
+    }
+
+    unlisteners.push(await listen('timer-scan-tick', () => void performScan('Active')));
+    unlisteners.push(await listen('scan-now-input', () => { if (!capturingKeybind) void performScan('Manual'); }));
+    unlisteners.push(await listen<boolean>('active-scan-toggled', (event) => activeScanOn = !!event.payload));
+    unlisteners.push(await listen('hotkey-toggle-active', () => void toggleActiveScan()));
+    unlisteners.push(await listen<boolean>('overlay-visibility-changed', (event) => overlayVisible = !!event.payload));
+    unlisteners.push(await listen<boolean>('overlay-setup-mode-changed', (event) => overlaySetupMode = !!event.payload));
+  });
+
+  onDestroy(() => {
+    document.removeEventListener('keydown', captureKeybind, true);
+    document.removeEventListener('mousedown', captureMouseKeybind, true);
+    unlisteners.forEach((unlisten) => unlisten());
+    if (saveTimer) clearTimeout(saveTimer);
   });
 </script>
 
-<div class="min-h-screen bg-bg text-text flex flex-col">
-  <!-- Thin status row -->
-  <div class="status-row">
-    <div class="flex items-center gap-1">
-      <span class="status-dot {hasRegion ? 'bg-success' : 'bg-danger'}"></span>
-      <span>{hasRegion ? "Region Ready" : "No Region"}</span>
+<svelte:head><title>SigLock</title></svelte:head>
+
+<main>
+  <header class="topbar">
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="drag-title" data-tauri-drag-region onmousedown={startMainWindowDrag}>
+      <strong data-tauri-drag-region>SigLock</strong>
+      <span data-tauri-drag-region>Control Center</span>
+      <i data-tauri-drag-region></i>
     </div>
-
-    <div class="flex items-center gap-1">
-      <span class="status-dot {tesseractStatus?.available ? 'bg-success' : 'bg-danger'}"></span>
-      <span>{tesseractStatus?.available ? "Tesseract Ready" : "Tesseract Missing"}</span>
+    <div class="status-pills">
+      <span class:good={tesseractStatus?.available}>{tesseractStatus?.available ? 'Scanner ready' : 'Scanner unavailable'}</span>
+      <button class:good={overlayVisible} onclick={toggleOverlay}>Overlay {overlayVisible ? 'visible' : 'hidden'}</button>
+      <span class:good={activeScanOn}>Active {activeScanOn ? 'on' : 'off'}</span>
     </div>
+  </header>
 
-    <div class="flex items-center gap-1">
-      <span class="status-dot {activeScanOn ? 'bg-success' : 'bg-text-muted'}"></span>
-      <span>Active Scan: {activeScanOn ? "ON" : "OFF"}</span>
-    </div>
+  <section class="scanner-strip">
+    <div><small>SCANNER STATUS</small><strong>{isScanning ? 'Scanning...' : scannerStatus}</strong></div>
+    <div><small>LAST RESULT</small><strong>{lastScanSummary}</strong>{#if lastScanTime}<span>{lastScanTime}</span>{/if}</div>
+    <div><small>REGION</small><strong>{hasRegion ? 'Ready' : 'Not set'}</strong><span>{regionInfo ?? 'Choose a capture region'}</span></div>
+  </section>
 
-    <div class="flex-1"></div>
-
-    {#if lastScanTime}
-      <div class="text-[10px] text-text-muted">
-        Last: {lastScanTime} • {lastScanSource?.toUpperCase() || ''} {debugNormalized ? `(${debugNormalized})` : ''}
-      </div>
-    {:else}
-      <div class="text-[10px] text-text-muted">Last: never</div>
-    {/if}
-  </div>
-
-  <div class="p-3 flex flex-col gap-3 flex-1">
-    <!-- Header -->
-    <div class="flex items-center justify-between">
-      <div>
-        <span class="font-semibold text-base tracking-tight">SigLock</span>
-        <span class="text-xs text-text-muted ml-1">v0.1</span>
-      </div>
-      <div class="text-[10px] text-text-muted">Mining Signature Overlay</div>
-    </div>
-
-    <!-- Manual Input (primary, always available) — uses JSON-driven matcher -->
-    <div class="card p-3">
-      <div class="text-xs text-text-muted mb-1.5 font-medium">MANUAL INPUT — from src/lib/data/signatures.json</div>
-      
-      <div class="flex gap-2 items-center">
-        <input
-          type="text"
-          class="input flex-1 text-xl font-mono tracking-wider"
-          bind:value={observed}
-          placeholder="e.g. 10800"
-          onkeydown={(e) => e.key === 'Enter' && runMatch()}
-        />
-        <button class="btn btn-primary px-5" onclick={runMatch}>
-          Match
-        </button>
-        <button class="btn btn-secondary px-3" onclick={clearInput}>
-          Clear
-        </button>
-      </div>
-      
-      <div class="mt-2 flex items-center gap-2 text-xs">
-        <label class="text-text-muted">Tolerance</label>
-        <input 
-          type="number" 
-          class="input w-16 text-center py-0.5 text-sm" 
-          bind:value={tolerance}
-          min="0"
-          max="200"
-        />
-        <span class="text-text-muted">± RS</span>
-        <span class="ml-auto text-[10px] text-text-muted">(default 25)</span>
-      </div>
-    </div>
-
-    <!-- Region + OCR Controls -->
-    <div class="card p-3">
-      <div class="flex items-center justify-between mb-2">
-        <div class="font-medium text-sm">OCR Region</div>
-        <div class="text-xs {hasRegion ? 'text-success' : 'text-danger'}">
-          {hasRegion ? "Region Ready" : "No Region"}
+  <div class="app-grid">
+    <div class="column">
+      <section class="card">
+        <h2>Manual Controls</h2>
+        <div class="button-row">
+          <button class="primary" onclick={() => void performScan('Manual')} disabled={isScanning && queuedTrigger !== null}>Scan Now</button>
+          <input aria-label="Manual signature value" bind:value={observed} onkeydown={(event) => event.key === 'Enter' && runManualMatch()} />
+          <button onclick={runManualMatch}>Match Value</button>
         </div>
-      </div>
+        <p class="hint">Scan Now works whether Active Scan is on or off. Manual value matching does not run OCR.</p>
+      </section>
 
-      {#if regionInfo}
-        <div class="text-[10px] text-text-muted mb-2 font-mono">{regionInfo}</div>
-      {/if}
+      <section class="card">
+        <div class="section-title"><h2>Active Scan</h2><button class:active={activeScanOn} onclick={toggleActiveScan}>{activeScanOn ? 'Turn Off' : 'Turn On'}</button></div>
+        <label>Interval <strong>{settings.activeScanIntervalMs / 1000}s</strong>
+          <input type="range" min="1000" max="4000" step="1000" bind:value={settings.activeScanIntervalMs} onchange={updateInterval} />
+        </label>
+        <p class="hint">One controlled loop, updated immediately. Scans never overlap.</p>
+      </section>
 
-      <div class="flex gap-2 mb-2">
-        <button class="btn btn-secondary flex-1 text-xs py-1.5" onclick={setRegion}>
-          Set Region
-        </button>
-        <button class="btn btn-secondary flex-1 text-xs py-1.5" onclick={clearRegion} disabled={!hasRegion}>
-          Clear
-        </button>
-        <button 
-          class="btn btn-primary flex-1 text-xs py-1.5" 
-          onclick={scanNow}
-          disabled={!hasRegion}
-        >
-          Scan Now
-        </button>
-      </div>
-
-      <!-- Active Scan Toggle -->
-      <div class="flex items-center justify-between mt-2">
-        <div class="font-medium text-sm">Active Scan</div>
-        <div class="toggle" onclick={toggleActiveScan}>
-          <div class="toggle-switch {activeScanOn ? 'on' : ''}"></div>
-          <span class="text-xs font-medium {activeScanOn ? 'text-success' : 'text-text-muted'}">
-            {activeScanOn ? "ON" : "OFF"}
-          </span>
+      <section class="card">
+        <h2>Keybinds</h2>
+        <div class="keybind-row"><span>Scan Now</span><kbd>{capturingKeybind ? 'Press a key or mouse button...' : keybindLabel(settings.scanNowKeybind)}</kbd></div>
+        <div class="button-row">
+          <button class="primary" onclick={() => { capturingKeybind = true; keybindError = null; }}>Set Keybind</button>
+          <button onclick={resetKeybind}>Reset Default</button>
         </div>
-      </div>
+        {#if keybindError}<p class="error">{keybindError}</p>{/if}
+      </section>
 
-      <!-- Capture Test for alignment verification (real capture, mock OCR still used elsewhere) -->
-      <div class="flex gap-2 mb-2">
-        <button 
-          class="btn btn-secondary flex-1 text-xs py-1.5" 
-          onclick={captureTest}
-          disabled={!hasRegion}
-        >
-          Capture Test
-        </button>
-      </div>
-
-      {#if lastCaptureInfo}
-        <div class="text-[10px] mb-1 {lastCaptureInfo.includes('failed') || lastCaptureInfo.includes('Set a region') ? 'text-danger' : 'text-text-muted'}">
-          {lastCaptureInfo}
+      <section class="card">
+        <h2>Region / Capture Settings</h2>
+        <div class="button-row">
+          <button class="primary" onclick={setRegion}>Set Region</button>
+          <button onclick={clearRegion} disabled={!hasRegion}>Clear</button>
+          <button onclick={captureTest} disabled={!hasRegion}>Capture Test</button>
         </div>
-      {/if}
+        {#if capturePreviewUrl}<img class="capture-preview" src={capturePreviewUrl} alt="Capture preview" />{/if}
+      </section>
 
-      {#if capturePreviewUrl}
-        <div class="mt-1">
-          <div class="text-[10px] text-text-muted mb-1">Captured crop preview:</div>
-          <img 
-            src={capturePreviewUrl} 
-            alt="Captured region preview" 
-            class="max-w-full border border-border rounded max-h-[120px] bg-black/50 object-contain"
-            onerror={() => { 
-              console.error("[CaptureTest] Image failed to load. Path was:", capturePreviewPath); 
-            }}
-          />
-          {#if capturePreviewPath}
-            <div class="text-[9px] text-text-muted mt-0.5 font-mono break-all">{capturePreviewPath}</div>
-          {/if}
-        </div>
-      {/if}
-
-      {#if ocrError}
-        <div class="text-xs text-danger bg-bg-elev p-1 rounded mt-1">{ocrError}</div>
-      {/if}
-
-      <div class="text-[10px] text-text-muted mt-1">
-        Capture Test does real screen capture of the crop. Scan Now / Active Scan use the current OCR settings below.
-      </div>
-
-      <!-- Collapsible OCR Debug / Tuning Panel (dev only) - collapsed by default -->
-      <details class="mt-2" bind:open={showDebug}>
-        <summary class="cursor-pointer text-xs font-medium text-text-muted select-none">
-          OCR Debug &amp; Tuning {showDebug ? '▼' : '▶'}
-        </summary>
-
-        <div class="mt-2 space-y-2 text-xs">
-          <!-- Tesseract status -->
-          <div>
-            <button class="btn btn-secondary text-[10px] py-0.5 px-2" onclick={checkTesseract}>Check Tesseract</button>
-            {#if tesseractStatus}
-              <span class={tesseractStatus.available ? 'text-success' : 'text-danger'}>
-                {tesseractStatus.available ? '✓ Found' : '✗ Missing'}
-              </span>
-              {#if tesseractStatus.version}<span class="text-text-muted"> — {tesseractStatus.version}</span>{/if}
-              {#if tesseractStatus.error}<div class="text-danger text-[10px]">{tesseractStatus.error}</div>{/if}
-            {/if}
-          </div>
-
-          <!-- Preprocessing controls -->
-          <div class="grid grid-cols-2 gap-x-3 gap-y-1">
-            <label class="flex items-center gap-1">
-              Upscale
-              <select bind:value={ocrConfig.upscale} class="input text-[10px] py-0 px-1 w-12">
-                <option value={1}>1x</option>
-                <option value={2}>2x</option>
-                <option value={3}>3x</option>
-                <option value={4}>4x</option>
-              </select>
-            </label>
-
-            <label class="flex items-center gap-1">
-              PSM
-              <select bind:value={ocrConfig.psm} class="input text-[10px] py-0 px-1 w-12">
-                <option value={7}>7 (line)</option>
-                <option value={8}>8 (word)</option>
-                <option value={13}>13 (raw)</option>
-              </select>
-            </label>
-
-            <label class="flex items-center gap-1 col-span-2">
-              <input type="checkbox" bind:checked={ocrConfig.threshold_enabled} />
-              Threshold
-              {#if ocrConfig.threshold_enabled}
-                <input type="number" bind:value={ocrConfig.threshold} class="input text-[10px] py-0 w-12" min="0" max="255" />
-              {/if}
-            </label>
-
-            <label class="flex items-center gap-1">
-              <input type="checkbox" bind:checked={ocrConfig.grayscale} /> Grayscale
-            </label>
-            <label class="flex items-center gap-1">
-              <input type="checkbox" bind:checked={ocrConfig.invert} /> Invert
-            </label>
-            <label class="flex items-center gap-1">
-              <input type="checkbox" bind:checked={ocrConfig.sharpen} /> Sharpen
-            </label>
-            <label class="flex items-center gap-1">
-              <input type="checkbox" bind:checked={ocrConfig.numeric_only} /> Numeric only
-            </label>
-          </div>
-
-          <!-- Debug outputs -->
-          <div class="space-y-1 pt-1 border-t border-border/50">
-            <div><strong>Raw OCR:</strong> <span class="font-mono">{debugRawText || '—'}</span></div>
-            <div><strong>Normalized:</strong> {debugNormalized ?? '—'}</div>
-            <div><strong>Size:</strong> {debugCaptureSize || '—'}</div>
-            <div><strong>Last scan:</strong> {debugLastScan ? new Date(debugLastScan).toLocaleTimeString() : '—'}</div>
-
-            {#if debugError}
-              <div class="text-danger"><strong>Error:</strong> {debugError}</div>
-            {/if}
-
-            <!-- Debug image previews -->
-            <div class="grid grid-cols-2 gap-2 pt-1">
-              <div>
-                <div class="text-[10px] text-text-muted">Raw crop</div>
-                {#if debugRawUrl}
-                  <img 
-                    src={debugRawUrl} 
-                    alt="Raw crop" 
-                    class="max-h-16 border border-border rounded bg-black/30" 
-                    onerror={() => console.error("[Debug] Raw crop image failed to load. Path:", debugRawPath)}
-                  />
-                  <div class="text-[9px] text-text-muted mt-0.5 font-mono break-all">{debugRawPath}</div>
-                {:else}
-                  <div class="text-[10px] text-text-muted">—</div>
-                {/if}
-              </div>
-              <div>
-                <div class="text-[10px] text-text-muted">Preprocessed</div>
-                {#if debugPreprocessedUrl}
-                  <img 
-                    src={debugPreprocessedUrl} 
-                    alt="Preprocessed" 
-                    class="max-h-16 border border-border rounded bg-black/30" 
-                    onerror={() => console.error("[Debug] Preprocessed image failed to load. Path:", debugPreprocessedPath)}
-                  />
-                  <div class="text-[9px] text-text-muted mt-0.5 font-mono break-all">{debugPreprocessedPath}</div>
-                {:else}
-                  <div class="text-[10px] text-text-muted">—</div>
-                {/if}
-              </div>
-            </div>
-          </div>
+      <details class="card">
+        <summary>Advanced Debug</summary>
+        <div class="debug-grid">
+          <label>Tolerance <input type="number" min="0" max="200" bind:value={tolerance} /></label>
+          <pre>{JSON.stringify({ tesseractStatus, debugResult, ocrError, overlayError }, null, 2)}</pre>
         </div>
       </details>
     </div>
 
-    <!-- Results (now driven by src/lib/data/signatures.json via signatures.ts) -->
-    <div class="card p-3 flex-1 min-h-[180px]">
-      <div class="flex items-center justify-between mb-2">
-        <div class="font-medium text-sm">Matches</div>
-        <div class="text-xs text-text-muted">{matches.length} result{matches.length === 1 ? '' : 's'}</div>
-      </div>
-
-      {#if matches.length === 0}
-        <div class="text-center py-8 text-text-muted text-xs">
-          Enter a scan signature above (try 3885, 10800, 3170, 3600).<br>
-          Data comes only from <span class="font-mono">src/lib/data/signatures.json</span>
+    <div class="column">
+      <section class="card">
+        <div class="section-title"><h2>Overlay Appearance</h2><span class="button-row"><button class:active={overlaySetupMode} onclick={toggleOverlaySetupMode}>{overlaySetupMode ? 'Finish positioning' : 'Unlock overlay'}</button><button onclick={resetOverlayPosition}>Reset overlay position</button></span></div>
+        <div class="appearance-grid">
+          <label>Text <input type="color" bind:value={settings.overlayTextColor} onchange={persistSettings} /></label>
+          <label>Background <input type="color" bind:value={settings.overlayBackgroundColor} onchange={persistSettings} /></label>
+          <label>Accent <input type="color" bind:value={settings.overlayAccentColor} onchange={persistSettings} /></label>
+          <label>Opacity <input type="range" min="0.35" max="1" step="0.05" bind:value={settings.overlayOpacity} onchange={persistSettings} /></label>
+          <label>Font size <input type="range" min="11" max="20" step="1" bind:value={settings.overlayFontSize} onchange={persistSettings} /></label>
+          <label>Result lifetime <input type="range" min="5" max="120" step="5" bind:value={settings.overlayResultLifetimeSeconds} onchange={persistSettings} /></label>
+          <label class="check"><input type="checkbox" bind:checked={settings.overlayHighContrast} onchange={persistSettings} /> High contrast</label>
+          <label class="check"><input type="checkbox" bind:checked={settings.overlayCompactMode} onchange={persistSettings} /> Compact mode</label>
         </div>
-      {:else}
-        <div class="overflow-x-auto">
-          <table class="w-full text-xs">
-            <thead>
-              <tr class="text-text-muted border-b border-border">
-                <th class="text-left py-1 pr-2">Material</th>
-                <th class="text-right py-1 px-2">Rocks</th>
-                <th class="text-right py-1 px-2">Expected</th>
-                <th class="text-right py-1 px-2">Observed</th>
-                <th class="text-right py-1 px-2">Delta</th>
-                <th class="text-center py-1 px-2">Type</th>
-                <th class="text-right py-1 pl-2">Conf</th>
-              </tr>
-            </thead>
-            <tbody>
-              {#each matches as m}
-                <tr class="border-b border-border/50 last:border-none">
-                  <td class="py-1 pr-2 font-semibold">{m.material}</td>
-                  <td class="py-1 px-2 text-right font-mono tabular-nums">×{m.rockCount}</td>
-                  <td class="py-1 px-2 text-right font-mono tabular-nums text-text-muted">{m.expected}</td>
-                  <td class="py-1 px-2 text-right font-mono tabular-nums">{m.observed}</td>
-                  <td class="py-1 px-2 text-right font-mono tabular-nums {m.delta === 0 ? 'text-success font-medium' : 'text-warning'}">
-                    {formatDelta(m.delta)}
-                  </td>
-                  <td class="py-1 px-2 text-center">
-                    <span class={m.matchType === 'exact' ? 'text-success font-medium' : 'text-warning'}>
-                      {m.matchType}
-                    </span>
-                  </td>
-                  <td class="py-1 pl-2 text-right font-mono tabular-nums text-accent">
-                    {(m.confidence * 100).toFixed(0)}%
-                  </td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
-      {/if}
-    </div>
+      </section>
 
-    <!-- Footer note -->
-    <div class="text-center text-[10px] text-text-muted pt-1">
-      Manual input always works • Data source: src/lib/data/signatures.json (single source of truth)
+      <section class="card results">
+        <div class="section-title"><h2>Current Matches</h2><span>{matches.length}</span></div>
+        {#if matches.length}
+          {#each matches.slice(0, 5) as match}
+            <div class="match-row"><strong>{match.material}</strong><span>x{match.rockCount}</span><span>{match.observed}</span><span>{Math.round(match.confidence * 100)}%</span></div>
+          {/each}
+        {:else}<p class="empty">No current matches.</p>{/if}
+      </section>
+
+      <section class="card history-card">
+        <div class="section-title"><h2>Rolling Scan Results</h2><button onclick={() => history = []} disabled={!history.length}>Clear History</button></div>
+        <div class="history-list">
+          {#if history.length}
+            {#each history as entry (entry.id)}
+              <div class="history-row">
+                <span class="status {entry.status}">{entry.status}</span>
+                <div><strong>{entry.material}</strong><span>{entry.trigger} · {new Date(entry.timestamp).toLocaleTimeString()} · {entry.durationMs}ms</span></div>
+                <div class="history-value"><strong>{entry.rawValue}</strong>{#if entry.confidence !== null}<span>{Math.round(entry.confidence * 100)}%</span>{/if}</div>
+                {#if entry.repeatCount > 1}<b class="repeat">x{entry.repeatCount}</b>{/if}
+              </div>
+            {/each}
+          {:else}<p class="empty">Scans will appear here, newest first.</p>{/if}
+        </div>
+      </section>
     </div>
   </div>
-</div>
+</main>

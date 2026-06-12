@@ -2,12 +2,25 @@ use base64::engine::general_purpose;
 use base64::Engine;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::time::Duration;
-use tauri::{Emitter, Manager, State};
+use tauri::{Emitter, LogicalPosition, LogicalSize, Manager, Position, Size, State};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use tokio::time::sleep;
+
+#[cfg(windows)]
+use windows_sys::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
+#[cfg(windows)]
+use windows_sys::Win32::UI::WindowsAndMessaging::{
+    CallNextHookEx, DispatchMessageW, GetMessageW, SetWindowsHookExW, TranslateMessage, MSG,
+    MSLLHOOKSTRUCT, WH_MOUSE_LL, WM_MBUTTONDOWN, WM_XBUTTONDOWN,
+};
+
+#[cfg(windows)]
+static MOUSE_HOOK_APP: OnceLock<tauri::AppHandle> = OnceLock::new();
+#[cfg(windows)]
+static SCAN_MOUSE_BUTTON: AtomicU32 = AtomicU32::new(0);
 
 /// Material signature data (base RS per rock/node)
 #[derive(Serialize, Clone, Debug)]
@@ -228,8 +241,9 @@ pub struct ScanRegion {
 struct AppStateInner {
     /// Whether Active Scan Mode is enabled by the user (persisted preference)
     active_scan_enabled: bool,
-    /// Current visibility of the main overlay window (updated on our hide/show paths)
-    is_visible: bool,
+    /// Current visibility of the dedicated overlay window
+    overlay_visible: bool,
+    overlay_setup_mode: bool,
     /// Current OCR region (None = not set)
     region: Option<ScanRegion>,
     /// Last observed signature and source
@@ -239,7 +253,7 @@ struct AppStateInner {
     hotkey_show_hide: String,
     hotkey_single_scan: String,
     hotkey_toggle_active: String,
-    /// Active scan interval in milliseconds (hard range 2000-5000)
+    /// Active scan interval in milliseconds (product range 1000-4000)
     scan_interval_ms: u64,
 }
 
@@ -265,14 +279,39 @@ type ActiveScanControllerState = Arc<Mutex<ActiveScanController>>;
 fn default_state() -> AppStateInner {
     AppStateInner {
         active_scan_enabled: false, // SAFETY: always start OFF
-        is_visible: true,           // Window starts visible
+        overlay_visible: true,
+        overlay_setup_mode: false,
         region: None,
         last_value: None,
         last_source: None,
         hotkey_show_hide: "Ctrl+Shift+M".to_string(),
-        hotkey_single_scan: "Ctrl+Shift+S".to_string(),
+        hotkey_single_scan: "Ctrl+Alt+F9".to_string(),
         hotkey_toggle_active: "Ctrl+Shift+O".to_string(),
         scan_interval_ms: 3000,
+    }
+}
+
+fn clamp_scan_interval(interval_ms: u64) -> u64 {
+    interval_ms.clamp(1000, 4000)
+}
+
+fn scan_mouse_button(binding: Option<&str>) -> Result<u32, String> {
+    match binding {
+        None => Ok(0),
+        Some("Middle Mouse") => Ok(1),
+        Some("Mouse4") => Ok(4),
+        Some("Mouse5") => Ok(5),
+        Some(_) => Err("Only Middle Mouse, Mouse4, and Mouse5 are supported.".into()),
+    }
+}
+
+#[cfg(windows)]
+fn mouse_button_from_message(message: u32, mouse_data: u32) -> u32 {
+    match message {
+        WM_MBUTTONDOWN => 1,
+        WM_XBUTTONDOWN if (mouse_data >> 16) == 1 => 4,
+        WM_XBUTTONDOWN => 5,
+        _ => 0,
     }
 }
 
@@ -280,56 +319,77 @@ fn default_state() -> AppStateInner {
 
 #[tauri::command]
 async fn toggle_overlay_visibility(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<bool, String> {
-    if let Some(window) = app.get_webview_window("main") {
+    if let Some(window) = app.get_webview_window("overlay") {
         let currently_visible = window.is_visible().unwrap_or(false);
 
         if currently_visible {
-            let _ = window.hide();
-            {
-                let mut s = state.lock().unwrap();
-                s.is_visible = false;
-            }
-
-            // Per spec: hiding the overlay must pause Active Scan
-            let controller: State<'_, ActiveScanControllerState> = app.state();
-            stop_active_scan_timer(controller.inner().clone());
-
-            Ok(false)
+            window.hide().map_err(|e| e.to_string())?;
         } else {
-            let _ = window.show();
-            let _ = window.set_focus();
-            let _ = app.emit("focus-manual-input", ());
-            {
-                let mut s = state.lock().unwrap();
-                s.is_visible = true;
-
-                // Per spec: on show, resume Active Scan only if it was enabled AND we have a region
-                if s.active_scan_enabled && s.region.is_some() {
-                    let interval = s.scan_interval_ms;
-                    drop(s); // release lock before starting timer
-                    start_active_scan_timer(app.clone(), state.inner().clone(), interval);
-                }
-            }
-            Ok(true)
+            window.set_always_on_top(true).map_err(|e| e.to_string())?;
+            window.show().map_err(|e| e.to_string())?;
         }
+        let visible = !currently_visible;
+        state.lock().unwrap().overlay_visible = visible;
+        let _ = app.emit("overlay-visibility-changed", visible);
+        Ok(visible)
     } else {
-        Err("Main window not found".into())
+        Err("Overlay window not found".into())
+    }
+}
+
+#[tauri::command]
+fn get_overlay_setup_mode(state: State<'_, AppState>) -> bool {
+    state.lock().unwrap().overlay_setup_mode
+}
+
+#[tauri::command]
+fn set_overlay_setup_mode(app: tauri::AppHandle, state: State<'_, AppState>, enabled: bool) -> Result<bool, String> {
+    let window = app.get_webview_window("overlay").ok_or_else(|| "Overlay window not found".to_string())?;
+    if enabled {
+        window.set_always_on_top(true).map_err(|e| e.to_string())?;
+        window.show().map_err(|e| e.to_string())?;
+    }
+    window.set_resizable(enabled).map_err(|e| e.to_string())?;
+    window.set_ignore_cursor_events(!enabled).map_err(|e| e.to_string())?;
+    state.lock().unwrap().overlay_setup_mode = enabled;
+    let _ = app.emit("overlay-setup-mode-changed", enabled);
+    Ok(enabled)
+}
+
+#[tauri::command]
+fn resize_overlay_to_content(app: tauri::AppHandle, width: f64, height: f64, setup_mode: bool) -> Result<(), String> {
+    let window = app.get_webview_window("overlay").ok_or_else(|| "Overlay window not found".to_string())?;
+    let min_width: f64 = if setup_mode { 196.0 } else { 1.0 };
+    let min_height: f64 = if setup_mode { 48.0 } else { 1.0 };
+    let size = LogicalSize::new(width.clamp(min_width, 340.0), height.clamp(min_height, 240.0));
+    window.set_size(Size::Logical(size)).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn reset_overlay_position(app: tauri::AppHandle) -> Result<(), String> {
+    let window = app.get_webview_window("overlay").ok_or_else(|| "Overlay window not found".to_string())?;
+    window.set_position(Position::Logical(LogicalPosition::new(80.0, 120.0))).map_err(|e| e.to_string())?;
+    window.set_size(Size::Logical(LogicalSize::new(196.0, 48.0))).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn set_scan_now_mouse_binding(binding: Option<String>) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        let button = scan_mouse_button(binding.as_deref())?;
+        SCAN_MOUSE_BUTTON.store(button, Ordering::SeqCst);
+        return Ok(());
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = binding;
+        Err("Global mouse Scan Now bindings are not supported on this platform.".into())
     }
 }
 
 #[tauri::command]
 async fn trigger_single_scan(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<(), String> {
-    // Per spec: if hidden, show the overlay first
-    if let Some(window) = app.get_webview_window("main") {
-        if !window.is_visible().unwrap_or(false) {
-            let _ = window.show();
-            let _ = window.set_focus();
-            let _ = app.emit("focus-manual-input", ());
-            let mut s = state.lock().unwrap();
-            s.is_visible = true;
-        }
-    }
-
     let has_region = {
         let s = state.lock().unwrap();
         s.region.is_some()
@@ -372,10 +432,32 @@ async fn toggle_active_scan(app: tauri::AppHandle, state: State<'_, AppState>) -
 }
 
 #[tauri::command]
+async fn set_scan_interval(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    interval_ms: u64,
+) -> Result<u64, String> {
+    let safe_interval = clamp_scan_interval(interval_ms);
+    let should_restart = {
+        let mut s = state.lock().unwrap();
+        s.scan_interval_ms = safe_interval;
+        s.active_scan_enabled && s.region.is_some()
+    };
+
+    if should_restart {
+        start_active_scan_timer(app, state.inner().clone(), safe_interval);
+    }
+
+    Ok(safe_interval)
+}
+
+#[tauri::command]
 fn get_app_state(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
     let s = state.lock().unwrap();
     Ok(serde_json::json!({
         "active_scan_enabled": s.active_scan_enabled,
+        "overlay_visible": s.overlay_visible,
+        "overlay_setup_mode": s.overlay_setup_mode,
         "has_region": s.region.is_some(),
         "scan_interval_ms": s.scan_interval_ms,
         "hotkeys": {
@@ -873,14 +955,13 @@ async fn capture_region_preview(
 // ==================== Active Scan Timer (single controlled task) ====================
 
 /// Starts the single active scan timer task if not already running.
-/// The task respects: active_scan_enabled + has region + is_visible + hard 2s minimum.
+/// The task respects: active_scan_enabled + has region + user interval.
 fn start_active_scan_timer(
     app: tauri::AppHandle,
     app_state: AppState,
     interval_ms: u64,
 ) {
-    // Enforce hard minimum of 2000ms (and max 5000 as per spec)
-    let safe_interval = interval_ms.max(2000).min(5000);
+    let safe_interval = clamp_scan_interval(interval_ms);
 
     let controller_state: State<'_, ActiveScanControllerState> = app.state();
     let mut controller = controller_state.lock().unwrap();
@@ -910,7 +991,7 @@ fn start_active_scan_timer(
             let (should_scan, current_interval) = {
                 let s = app_state_for_task.lock().unwrap();
                 let has_region = s.region.is_some();
-                let conditions_met = s.active_scan_enabled && has_region && s.is_visible;
+                let conditions_met = s.active_scan_enabled && has_region;
                 (conditions_met, s.scan_interval_ms)
             };
 
@@ -943,29 +1024,23 @@ fn stop_active_scan_timer(controller_state: ActiveScanControllerState) {
 
 fn register_default_hotkeys(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let show_hide_shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyM);
-    let single_scan_shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyS);
     let toggle_active_shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyO);
 
-    let app_handle = app.clone();
     app.global_shortcut().on_shortcut(show_hide_shortcut, move |app, _shortcut, event| {
         if event.state() == ShortcutState::Pressed {
-            let _ = app.emit("hotkey-show-hide", ());
-            if let Some(window) = app.get_webview_window("main") {
+            if let Some(window) = app.get_webview_window("overlay") {
                 if window.is_visible().unwrap_or(false) {
                     let _ = window.hide();
                 } else {
+                    let _ = window.set_always_on_top(true);
                     let _ = window.show();
-                    let _ = window.set_focus();
-                    let _ = app.emit("focus-manual-input", ());
                 }
+                let visible = window.is_visible().unwrap_or(false);
+                if let Ok(mut state) = app.state::<AppState>().lock() {
+                    state.overlay_visible = visible;
+                }
+                let _ = app.emit("overlay-visibility-changed", visible);
             }
-        }
-    })?;
-
-    let app_handle2 = app_handle.clone();
-    app.global_shortcut().on_shortcut(single_scan_shortcut, move |app, _shortcut, event| {
-        if event.state() == ShortcutState::Pressed {
-            let _ = app.emit("hotkey-single-scan", ());
         }
     })?;
 
@@ -977,6 +1052,75 @@ fn register_default_hotkeys(app: &tauri::AppHandle) -> Result<(), Box<dyn std::e
 
     println!("[SigLock] Default hotkeys registered successfully");
     Ok(())
+}
+
+#[cfg(windows)]
+unsafe extern "system" fn scan_mouse_hook(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    if code >= 0 {
+        let selected = SCAN_MOUSE_BUTTON.load(Ordering::SeqCst);
+        let data = (*(lparam as *const MSLLHOOKSTRUCT)).mouseData;
+        let pressed = mouse_button_from_message(wparam as u32, data);
+        if selected != 0 && pressed == selected {
+            if let Some(app) = MOUSE_HOOK_APP.get() {
+                let _ = app.emit("scan-now-input", ());
+            }
+        }
+    }
+    CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam)
+}
+
+#[cfg(windows)]
+fn start_scan_mouse_hook(app: tauri::AppHandle) {
+    let _ = MOUSE_HOOK_APP.set(app);
+    std::thread::spawn(|| unsafe {
+        let hook = SetWindowsHookExW(WH_MOUSE_LL, Some(scan_mouse_hook), std::ptr::null_mut(), 0);
+        if hook.is_null() {
+            eprintln!("[SigLock] Failed to install global mouse hook");
+            return;
+        }
+        let mut message: MSG = std::mem::zeroed();
+        while GetMessageW(&mut message, std::ptr::null_mut(), 0, 0) > 0 {
+            TranslateMessage(&message);
+            DispatchMessageW(&message);
+        }
+    });
+}
+
+#[cfg(not(windows))]
+fn start_scan_mouse_hook(_app: tauri::AppHandle) {}
+
+#[cfg(test)]
+mod tests {
+    use super::{clamp_scan_interval, scan_mouse_button};
+    #[cfg(windows)]
+    use super::{mouse_button_from_message, WM_MBUTTONDOWN, WM_XBUTTONDOWN};
+
+    #[test]
+    fn scan_interval_is_clamped_to_product_range() {
+        assert_eq!(clamp_scan_interval(0), 1000);
+        assert_eq!(clamp_scan_interval(1000), 1000);
+        assert_eq!(clamp_scan_interval(3000), 3000);
+        assert_eq!(clamp_scan_interval(4000), 4000);
+        assert_eq!(clamp_scan_interval(30000), 4000);
+    }
+
+    #[test]
+    fn supported_mouse_bindings_map_to_global_hook_buttons() {
+        assert_eq!(scan_mouse_button(None).unwrap(), 0);
+        assert_eq!(scan_mouse_button(Some("Middle Mouse")).unwrap(), 1);
+        assert_eq!(scan_mouse_button(Some("Mouse4")).unwrap(), 4);
+        assert_eq!(scan_mouse_button(Some("Mouse5")).unwrap(), 5);
+        assert!(scan_mouse_button(Some("Left Click")).is_err());
+        assert!(scan_mouse_button(Some("Right Click")).is_err());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn global_mouse_messages_trigger_middle_mouse4_and_mouse5() {
+        assert_eq!(mouse_button_from_message(WM_MBUTTONDOWN, 0), 1);
+        assert_eq!(mouse_button_from_message(WM_XBUTTONDOWN, 1 << 16), 4);
+        assert_eq!(mouse_button_from_message(WM_XBUTTONDOWN, 2 << 16), 5);
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -993,8 +1137,14 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             match_signature,
             toggle_overlay_visibility,
+            get_overlay_setup_mode,
+            set_overlay_setup_mode,
+            resize_overlay_to_content,
+            reset_overlay_position,
+            set_scan_now_mouse_binding,
             trigger_single_scan,
             toggle_active_scan,
+            set_scan_interval,
             get_app_state,
             set_crop_region,
             get_crop_region,
@@ -1005,10 +1155,16 @@ pub fn run() {
             check_tesseract
         ])
         .setup(move |app| {
+            if let Some(overlay) = app.get_webview_window("overlay") {
+                let _ = overlay.set_always_on_top(true);
+                let _ = overlay.set_ignore_cursor_events(true);
+            }
+            start_scan_mouse_hook(app.handle().clone());
+
             if let Err(e) = register_default_hotkeys(&app.handle()) {
                 eprintln!("[SigLock] Failed to register hotkeys: {}", e);
             } else {
-                println!("[SigLock] Hotkeys registered: Ctrl+Shift+M (show/hide), S (single scan), O (toggle active)");
+                println!("[SigLock] Hotkeys registered: Ctrl+Shift+M (show/hide), Ctrl+Shift+O (toggle active)");
             }
 
             // Active Scan is forced OFF on every launch (already default)
