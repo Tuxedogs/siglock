@@ -69,17 +69,11 @@ main { width: 100%; min-height: 100vh; padding: 10px 12px 12px; overflow-x: hidd
 .drag-title { display: flex; align-self: stretch; align-items: center; flex: 1; min-width: 120px; user-select: none; }
 .drag-title i { align-self: stretch; flex: 1; }
 .brand-mark {
-  display: grid;
   width: 27px;
   height: 27px;
   margin-right: 8px;
-  place-items: center;
-  color: #a8c9ff;
-  background: #10233a;
-  border: 1px solid #4a78b4;
+  object-fit: contain;
   border-radius: 7px;
-  font-size: 18px;
-  transform: rotate(45deg);
 }
 .drag-title strong { font-size: 17px; letter-spacing: .01em; }
 .drag-title > span:not(.brand-mark) { margin-left: 9px; color: var(--muted); font-size: 10px; }

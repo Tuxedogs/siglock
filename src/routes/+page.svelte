@@ -4,6 +4,8 @@
   import { emitTo, listen, type UnlistenFn } from '@tauri-apps/api/event';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { isRegistered, register, unregister } from '@tauri-apps/plugin-global-shortcut';
+  import { relaunch } from '@tauri-apps/plugin-process';
+  import { check } from '@tauri-apps/plugin-updater';
   import { dev } from '$app/environment';
   import { matchObservedValue, type MatchResult } from '$lib/data/signatures';
   import { buildScanResultKey, isDuplicateResult, normalizeMaterial } from '$lib/scanDedupe';
@@ -73,6 +75,8 @@
   let capturePreviewUrl = $state<string | null>(null);
   let debugResult = $state<any>(null);
   let overlayError = $state<string | null>(null);
+  let updateStatus = $state('Check Updates');
+  let updating = $state(false);
   let unlisteners: UnlistenFn[] = [];
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -173,7 +177,7 @@
     scannerStatus = `${trigger} scan started`;
     const started = performance.now();
     try {
-      const result: any = await invoke('scan_selected_region', { config: ocrConfig });
+      const result: any = await invoke('scan_selected_region', { config: ocrConfig, trigger });
       debugResult = result;
       const rawValue = result?.raw_text || (result?.normalized_value?.toString() ?? '-');
       const durationMs = Math.round(performance.now() - started);
@@ -476,6 +480,28 @@
     }
   }
 
+  async function checkForUpdates() {
+    if (updating) return;
+    updating = true;
+    updateStatus = 'Checking...';
+    try {
+      const update = await check();
+      if (!update) {
+        updateStatus = 'Up to date';
+        return;
+      }
+
+      updateStatus = `Installing ${update.version}...`;
+      await update.downloadAndInstall();
+      await relaunch();
+    } catch (error) {
+      updateStatus = 'Update failed';
+      scannerStatus = `Update failed: ${String(error)}`;
+    } finally {
+      updating = false;
+    }
+  }
+
   onMount(async () => {
     document.addEventListener('keydown', captureKeybind, true);
     document.addEventListener('mousedown', captureMouseKeybind, true);
@@ -544,12 +570,13 @@
   <header class="topbar">
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div class="drag-title" data-tauri-drag-region onmousedown={startMainWindowDrag}>
-      <span class="brand-mark" data-tauri-drag-region>◇</span>
+      <img class="brand-mark" src="/siglock-icon.png" alt="" data-tauri-drag-region />
       <strong data-tauri-drag-region>SigLock</strong>
       <span data-tauri-drag-region>Mining Signature Overlay</span>
       <i data-tauri-drag-region></i>
     </div>
     <div class="status-pills">
+      <button onclick={checkForUpdates} disabled={updating}>{updateStatus}</button>
       <button class:good={overlayVisible} onclick={toggleOverlay}>Overlay {overlayVisible ? 'On' : 'Off'}</button>
       <span class:good={activeScanOn}>Auto {activeScanOn ? 'On' : 'Off'}</span>
     </div>
@@ -602,13 +629,13 @@
         </div>
       </section>
 
-      <details class="card">
+      {#if dev}<details class="card">
         <summary><span><span class="title-icon muted">&lt;/&gt;</span>Advanced Debug</span><i>Raw logs, OCR output, and internal details.</i></summary>
         <div class="debug-grid">
           <label>Tolerance <input type="number" min="0" max="200" bind:value={tolerance} /></label>
           <pre>{JSON.stringify({ tesseractStatus, debugResult, ocrError, overlayError, keybindError, scannerStatus, regionInfo, lastScanSummary, lastScanTime }, null, 2)}</pre>
         </div>
-      </details>
+      </details>{/if}
     </div>
 
     <div class="column">

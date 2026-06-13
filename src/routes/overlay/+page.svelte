@@ -18,7 +18,6 @@
   let now = $state(Date.now());
   let unlisteners: UnlistenFn[] = [];
   let expiryTimer: ReturnType<typeof setInterval> | null = null;
-  let resizeTimer: ReturnType<typeof setTimeout> | null = null;
 
   async function anchorOverlay(event: MouseEvent) {
     event.stopPropagation();
@@ -46,20 +45,6 @@
     return now - new Date(match.updatedAt).getTime() < settings.overlayResultLifetimeSeconds * 1000;
   }).slice(0, 3));
 
-  $effect(() => {
-    visibleMatches;
-    setupMode;
-    settings?.overlayCompactMode;
-    settings?.overlayFontSize;
-    if (resizeTimer) clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => {
-      const shell = document.querySelector<HTMLElement>('.overlay-shell');
-      const width = shell ? Math.ceil(shell.getBoundingClientRect().width) : 1;
-      const height = shell ? Math.ceil(shell.getBoundingClientRect().height) : 1;
-      void invoke('resize_overlay_to_content', { width, height, setupMode });
-    }, 20);
-  });
-
   onMount(async () => {
     settings = await loadSettingsReadOnly();
     unlisteners.push(await listen<SigLockSettings>('overlay-settings-updated', (event) => settings = event.payload));
@@ -72,12 +57,11 @@
   onDestroy(() => {
     unlisteners.forEach((unlisten) => unlisten());
     if (expiryTimer) clearInterval(expiryTimer);
-    if (resizeTimer) clearTimeout(resizeTimer);
   });
 </script>
 
 {#if setupMode || visibleMatches.length}
-<div class="overlay-shell" data-tauri-drag-region={setupMode || undefined}>
+<div class="overlay-shell">
   {#if setupMode}
     <div class="setup-handle" data-tauri-drag-region>
       <span data-tauri-drag-region>Overlay position</span>

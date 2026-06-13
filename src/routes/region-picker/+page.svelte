@@ -119,7 +119,7 @@
   <!-- Rubber band selection box -->
   <div
     bind:this={selectionBox}
-    class="fixed border-2 border-red-500 bg-red-500/10 pointer-events-none z-[90]"
+    class="fixed border-2 border-blue-400 bg-blue-400/10 pointer-events-none z-[90]"
     style="display: none;"
   ></div>
 

@@ -1,26 +1,34 @@
 use base64::engine::general_purpose;
 use base64::Engine;
 use serde::{Deserialize, Serialize};
+use std::io::Write;
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
-use tauri::{Emitter, LogicalPosition, LogicalSize, Manager, PhysicalPosition, Position, Size, State, WindowEvent};
+use tauri::{Emitter, LogicalPosition, Manager, PhysicalPosition, Position, State, WindowEvent};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use tokio::time::sleep;
 
 #[cfg(windows)]
-use windows_sys::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
+use windows_sys::Win32::Foundation::{BOOL, HWND, LPARAM, LRESULT, WPARAM};
 #[cfg(windows)]
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    CallNextHookEx, DispatchMessageW, GetMessageW, SetWindowsHookExW, TranslateMessage, MSG,
-    MSLLHOOKSTRUCT, WH_MOUSE_LL, WM_MBUTTONDOWN, WM_XBUTTONDOWN,
+    CallNextHookEx, DispatchMessageW, EnumWindows, GetClassNameW, GetMessageW,
+    GetWindowThreadProcessId, SetLayeredWindowAttributes, SetWindowsHookExW, TranslateMessage,
+    LWA_ALPHA, MSG, MSLLHOOKSTRUCT, WH_MOUSE_LL, WM_MBUTTONDOWN, WM_XBUTTONDOWN,
 };
 
 #[cfg(windows)]
 static MOUSE_HOOK_APP: OnceLock<tauri::AppHandle> = OnceLock::new();
 #[cfg(windows)]
 static SCAN_MOUSE_BUTTON: AtomicU32 = AtomicU32::new(0);
+
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 /// Material signature data (base RS per rock/node)
 #[derive(Serialize, Clone, Debug)]
@@ -59,14 +67,14 @@ pub struct OcrScanResult {
 /// Configuration for preprocessing and Tesseract (dev tunable)
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct OcrConfig {
-    pub upscale: u32,           // 1, 2, 3, 4
+    pub upscale: u32, // 1, 2, 3, 4
     pub threshold_enabled: bool,
-    pub threshold: u8,          // 0-255
+    pub threshold: u8, // 0-255
     pub grayscale: bool,
     pub invert: bool,
     pub sharpen: bool,
-    pub psm: u8,                // 7, 8, 13 etc.
-    pub numeric_only: bool,     // apply whitelist
+    pub psm: u8,            // 7, 8, 13 etc.
+    pub numeric_only: bool, // apply whitelist
 }
 
 // ==================== Release-friendly Path & Engine Resolution Helpers ====================
@@ -101,6 +109,70 @@ fn get_native_settings_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(get_app_data_dir(app)?.join("native-settings.json"))
 }
 
+fn log_window_lifecycle(app: &tauri::AppHandle, label: &str, action: &str, context: &str) {
+    let timestamp = chrono::Utc::now().to_rfc3339();
+    let line = format!(
+        "{} label={} action={} context={}\n",
+        timestamp, label, action, context
+    );
+    if let Ok(path) = get_app_data_dir(app).map(|dir| dir.join("window-lifecycle.log")) {
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+        {
+            let _ = file.write_all(line.as_bytes());
+        }
+    }
+    print!("[WindowLifecycle] {}", line);
+}
+
+fn background_command(program: impl AsRef<std::ffi::OsStr>) -> Command {
+    let mut command = Command::new(program);
+    #[cfg(windows)]
+    command.creation_flags(CREATE_NO_WINDOW);
+    command
+}
+
+#[cfg(windows)]
+unsafe extern "system" fn suppress_tao_event_target(hwnd: HWND, lparam: LPARAM) -> BOOL {
+    let mut process_id = 0;
+    GetWindowThreadProcessId(hwnd, &mut process_id);
+    if process_id != std::process::id() {
+        return 1;
+    }
+
+    let mut class_name = [0u16; 64];
+    let length = GetClassNameW(hwnd, class_name.as_mut_ptr(), class_name.len() as i32);
+    if length > 0
+        && String::from_utf16_lossy(&class_name[..length as usize]) == "Tao Thread Event Target"
+    {
+        SetLayeredWindowAttributes(hwnd, 0, 0, LWA_ALPHA);
+        *(lparam as *mut bool) = true;
+    }
+    1
+}
+
+#[cfg(windows)]
+fn suppress_tao_event_target_artifact(app: &tauri::AppHandle) {
+    let mut found = false;
+    unsafe {
+        EnumWindows(
+            Some(suppress_tao_event_target),
+            &mut found as *mut bool as LPARAM,
+        );
+    }
+    if found {
+        log_window_lifecycle(app, "tao_event_target", "set_alpha_zero", "startup");
+    }
+}
+
+#[cfg(not(windows))]
+fn suppress_tao_event_target_artifact(_app: &tauri::AppHandle) {}
+
 /// Resolves the Tesseract executable path by trying candidates in priority order
 /// and returning the first one that successfully responds to `--version`.
 ///
@@ -115,18 +187,20 @@ fn resolve_tesseract_executable(app: Option<&tauri::AppHandle>) -> PathBuf {
     // 1. Bundled / app-local path (used after proper packaging)
     if let Some(app_handle) = app {
         if let Ok(resource_dir) = app_handle.path().resource_dir() {
-            let bundled = resource_dir
-                .join("tesseract")
-                .join("tesseract.exe");
+            let bundled = resource_dir.join("tesseract").join("tesseract.exe");
             candidates.push(bundled);
         }
     }
 
     // 2. Common 64-bit Windows install location
-    candidates.push(PathBuf::from(r"C:\Program Files\Tesseract-OCR\tesseract.exe"));
+    candidates.push(PathBuf::from(
+        r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+    ));
 
     // 3. Common 32-bit Windows install location
-    candidates.push(PathBuf::from(r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe"));
+    candidates.push(PathBuf::from(
+        r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+    ));
 
     // 4. System PATH fallback
     candidates.push(PathBuf::from("tesseract"));
@@ -135,10 +209,7 @@ fn resolve_tesseract_executable(app: Option<&tauri::AppHandle>) -> PathBuf {
         // For PATH entry ("tesseract"), we don't check existence — just try to run it.
         // For explicit paths, we can skip if the file doesn't exist to avoid noise.
         if candidate == &PathBuf::from("tesseract") || candidate.exists() {
-            if let Ok(output) = std::process::Command::new(candidate)
-                .arg("--version")
-                .output()
-            {
+            if let Ok(output) = background_command(candidate).arg("--version").output() {
                 if output.status.success() {
                     println!("[SigLock] Using Tesseract at: {}", candidate.display());
                     return candidate.clone();
@@ -166,32 +237,136 @@ pub struct CaptureResult {
 
 /// Hard-coded signature index (26 materials)
 static MATERIALS: &[Material] = &[
-    Material { name: "Quantainium", base: 3170, category: Some("High value") },
-    Material { name: "Stileron", base: 3185, category: None },
-    Material { name: "Savrilium", base: 3200, category: None },
-    Material { name: "Ouratite", base: 3370, category: None },
-    Material { name: "Riccite", base: 3385, category: None },
-    Material { name: "Lindinium", base: 3400, category: None },
-    Material { name: "Beryl", base: 3540, category: None },
-    Material { name: "Taranite", base: 3555, category: None },
-    Material { name: "Borase", base: 3570, category: None },
-    Material { name: "Gold", base: 3585, category: None },
-    Material { name: "Bexalite", base: 3600, category: None },
-    Material { name: "Laranite", base: 3825, category: None },
-    Material { name: "Aslarite", base: 3840, category: None },
-    Material { name: "Titanium", base: 3855, category: None },
-    Material { name: "Tungsten", base: 3870, category: None },
-    Material { name: "Agricium", base: 3885, category: None },
-    Material { name: "Torite", base: 3900, category: None },
-    Material { name: "Hephestanite", base: 4180, category: None },
-    Material { name: "Tin", base: 4195, category: None },
-    Material { name: "Quartz", base: 4210, category: None },
-    Material { name: "Corundum", base: 4225, category: None },
-    Material { name: "Copper", base: 4240, category: None },
-    Material { name: "Silicon", base: 4255, category: None },
-    Material { name: "Iron", base: 4270, category: None },
-    Material { name: "Aluminium", base: 4285, category: None },
-    Material { name: "Ice", base: 4300, category: Some("Common") },
+    Material {
+        name: "Quantainium",
+        base: 3170,
+        category: Some("High value"),
+    },
+    Material {
+        name: "Stileron",
+        base: 3185,
+        category: None,
+    },
+    Material {
+        name: "Savrilium",
+        base: 3200,
+        category: None,
+    },
+    Material {
+        name: "Ouratite",
+        base: 3370,
+        category: None,
+    },
+    Material {
+        name: "Riccite",
+        base: 3385,
+        category: None,
+    },
+    Material {
+        name: "Lindinium",
+        base: 3400,
+        category: None,
+    },
+    Material {
+        name: "Beryl",
+        base: 3540,
+        category: None,
+    },
+    Material {
+        name: "Taranite",
+        base: 3555,
+        category: None,
+    },
+    Material {
+        name: "Borase",
+        base: 3570,
+        category: None,
+    },
+    Material {
+        name: "Gold",
+        base: 3585,
+        category: None,
+    },
+    Material {
+        name: "Bexalite",
+        base: 3600,
+        category: None,
+    },
+    Material {
+        name: "Laranite",
+        base: 3825,
+        category: None,
+    },
+    Material {
+        name: "Aslarite",
+        base: 3840,
+        category: None,
+    },
+    Material {
+        name: "Titanium",
+        base: 3855,
+        category: None,
+    },
+    Material {
+        name: "Tungsten",
+        base: 3870,
+        category: None,
+    },
+    Material {
+        name: "Agricium",
+        base: 3885,
+        category: None,
+    },
+    Material {
+        name: "Torite",
+        base: 3900,
+        category: None,
+    },
+    Material {
+        name: "Hephestanite",
+        base: 4180,
+        category: None,
+    },
+    Material {
+        name: "Tin",
+        base: 4195,
+        category: None,
+    },
+    Material {
+        name: "Quartz",
+        base: 4210,
+        category: None,
+    },
+    Material {
+        name: "Corundum",
+        base: 4225,
+        category: None,
+    },
+    Material {
+        name: "Copper",
+        base: 4240,
+        category: None,
+    },
+    Material {
+        name: "Silicon",
+        base: 4255,
+        category: None,
+    },
+    Material {
+        name: "Iron",
+        base: 4270,
+        category: None,
+    },
+    Material {
+        name: "Aluminium",
+        base: 4285,
+        category: None,
+    },
+    Material {
+        name: "Ice",
+        base: 4300,
+        category: Some("Common"),
+    },
 ];
 
 /// Core matching logic (exact first, then ± tolerance)
@@ -201,7 +376,9 @@ fn match_signature(observed: u32, tolerance: Option<i32>) -> Vec<MatchResult> {
     let mut results: Vec<MatchResult> = Vec::new();
 
     for mat in MATERIALS {
-        if mat.base == 0 { continue; }
+        if mat.base == 0 {
+            continue;
+        }
 
         let rocks_f = observed as f64 / mat.base as f64;
         let estimated_rocks = rocks_f.round().clamp(1.0, 20.0) as u32;
@@ -326,10 +503,40 @@ fn save_region(app: &tauri::AppHandle, region: Option<ScanRegion>) -> Result<(),
     save_native_settings(app, &settings)
 }
 
-fn save_overlay_position(app: &tauri::AppHandle, position: PhysicalPosition<i32>) -> Result<(), String> {
+fn save_overlay_position(
+    app: &tauri::AppHandle,
+    position: PhysicalPosition<i32>,
+) -> Result<(), String> {
     let mut settings = load_native_settings(app);
     settings.overlay_position = Some((position.x, position.y));
     save_native_settings(app, &settings)
+}
+
+fn safe_overlay_position(
+    window: &tauri::WebviewWindow,
+    saved: Option<(i32, i32)>,
+) -> PhysicalPosition<i32> {
+    let fallback = PhysicalPosition::new(80, 120);
+    let Some((x, y)) = saved else {
+        return fallback;
+    };
+
+    let is_visible = window.available_monitors().ok().is_some_and(|monitors| {
+        monitors.iter().any(|monitor| {
+            let origin = monitor.position();
+            let size = monitor.size();
+            x < origin.x + size.width as i32
+                && x + 340 > origin.x
+                && y < origin.y + size.height as i32
+                && y + 240 > origin.y
+        })
+    });
+
+    if is_visible {
+        PhysicalPosition::new(x, y)
+    } else {
+        fallback
+    }
 }
 
 fn clamp_scan_interval(interval_ms: u64) -> u64 {
@@ -359,15 +566,20 @@ fn mouse_button_from_message(message: u32, mouse_data: u32) -> u32 {
 // ==================== Commands ====================
 
 #[tauri::command]
-async fn toggle_overlay_visibility(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<bool, String> {
+async fn toggle_overlay_visibility(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<bool, String> {
     if let Some(window) = app.get_webview_window("overlay") {
         let currently_visible = window.is_visible().unwrap_or(false);
 
         if currently_visible {
             window.hide().map_err(|e| e.to_string())?;
+            log_window_lifecycle(&app, "overlay", "hide", "overlay_update");
         } else {
             window.set_always_on_top(true).map_err(|e| e.to_string())?;
             window.show().map_err(|e| e.to_string())?;
+            log_window_lifecycle(&app, "overlay", "show", "overlay_update");
         }
         let visible = !currently_visible;
         state.lock().unwrap().overlay_visible = visible;
@@ -384,34 +596,38 @@ fn get_overlay_setup_mode(state: State<'_, AppState>) -> bool {
 }
 
 #[tauri::command]
-fn set_overlay_setup_mode(app: tauri::AppHandle, state: State<'_, AppState>, enabled: bool) -> Result<bool, String> {
-    let window = app.get_webview_window("overlay").ok_or_else(|| "Overlay window not found".to_string())?;
+fn set_overlay_setup_mode(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    enabled: bool,
+) -> Result<bool, String> {
+    let window = app
+        .get_webview_window("overlay")
+        .ok_or_else(|| "Overlay window not found".to_string())?;
     if enabled {
         window.set_always_on_top(true).map_err(|e| e.to_string())?;
         window.show().map_err(|e| e.to_string())?;
+        log_window_lifecycle(&app, "overlay", "show", "overlay_update");
     }
     window.set_resizable(enabled).map_err(|e| e.to_string())?;
-    window.set_ignore_cursor_events(!enabled).map_err(|e| e.to_string())?;
+    window
+        .set_ignore_cursor_events(!enabled)
+        .map_err(|e| e.to_string())?;
     state.lock().unwrap().overlay_setup_mode = enabled;
     let _ = app.emit("overlay-setup-mode-changed", enabled);
     Ok(enabled)
 }
 
 #[tauri::command]
-fn resize_overlay_to_content(app: tauri::AppHandle, width: f64, height: f64, setup_mode: bool) -> Result<(), String> {
-    let window = app.get_webview_window("overlay").ok_or_else(|| "Overlay window not found".to_string())?;
-    let min_width: f64 = if setup_mode { 196.0 } else { 1.0 };
-    let min_height: f64 = if setup_mode { 48.0 } else { 1.0 };
-    let size = LogicalSize::new(width.clamp(min_width, 340.0), height.clamp(min_height, 240.0));
-    window.set_size(Size::Logical(size)).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
 fn reset_overlay_position(app: tauri::AppHandle) -> Result<(), String> {
-    let window = app.get_webview_window("overlay").ok_or_else(|| "Overlay window not found".to_string())?;
-    window.set_position(Position::Logical(LogicalPosition::new(80.0, 120.0))).map_err(|e| e.to_string())?;
-    save_overlay_position(&app, window.outer_position().map_err(|e| e.to_string())?)?;
-    window.set_size(Size::Logical(LogicalSize::new(196.0, 48.0))).map_err(|e| e.to_string())
+    let window = app
+        .get_webview_window("overlay")
+        .ok_or_else(|| "Overlay window not found".to_string())?;
+    window
+        .set_position(Position::Logical(LogicalPosition::new(80.0, 120.0)))
+        .map_err(|e| e.to_string())?;
+    log_window_lifecycle(&app, "overlay", "set_position", "overlay_update");
+    save_overlay_position(&app, window.outer_position().map_err(|e| e.to_string())?)
 }
 
 #[tauri::command]
@@ -431,7 +647,10 @@ fn set_scan_now_mouse_binding(binding: Option<String>) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn trigger_single_scan(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+async fn trigger_single_scan(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
     let has_region = {
         let s = state.lock().unwrap();
         s.region.is_some()
@@ -448,11 +667,18 @@ async fn trigger_single_scan(app: tauri::AppHandle, state: State<'_, AppState>) 
 }
 
 #[tauri::command]
-async fn toggle_active_scan(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<bool, String> {
+async fn toggle_active_scan(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<bool, String> {
     let (enabled, had_region, interval) = {
         let mut s = state.lock().unwrap();
         s.active_scan_enabled = !s.active_scan_enabled;
-        (s.active_scan_enabled, s.region.is_some(), s.scan_interval_ms)
+        (
+            s.active_scan_enabled,
+            s.region.is_some(),
+            s.scan_interval_ms,
+        )
     };
 
     let _ = app.emit("active-scan-toggled", enabled);
@@ -460,7 +686,10 @@ async fn toggle_active_scan(app: tauri::AppHandle, state: State<'_, AppState>) -
     if enabled {
         if had_region {
             start_active_scan_timer(app.clone(), state.inner().clone(), interval);
-            println!("[SigLock] Active Scan ENABLED → timer started ({}ms interval)", interval);
+            println!(
+                "[SigLock] Active Scan ENABLED → timer started ({}ms interval)",
+                interval
+            );
         } else {
             println!("[SigLock] Active Scan ENABLED but no region set — timer not started");
         }
@@ -530,7 +759,10 @@ fn get_crop_region(state: State<'_, AppState>) -> Result<Option<ScanRegion>, Str
 }
 
 #[tauri::command]
-async fn clear_crop_region(state: State<'_, AppState>, app: tauri::AppHandle) -> Result<(), String> {
+async fn clear_crop_region(
+    state: State<'_, AppState>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
     let mut s = state.lock().unwrap();
     s.region = None;
     save_region(&app, None)
@@ -540,7 +772,7 @@ async fn clear_crop_region(state: State<'_, AppState>, app: tauri::AppHandle) ->
 async fn check_tesseract(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
     let tesseract_path = resolve_tesseract_executable(Some(&app));
 
-    let output = std::process::Command::new(&tesseract_path)
+    let output = background_command(&tesseract_path)
         .arg("--version")
         .output();
 
@@ -562,37 +794,26 @@ async fn check_tesseract(app: tauri::AppHandle) -> Result<serde_json::Value, Str
                 "path": tesseract_path.to_string_lossy(),
             }))
         }
-        Err(e) => {
-            Ok(serde_json::json!({
-                "available": false,
-                "path_checked": tesseract_path.to_string_lossy(),
-                "error": format!(
-                    "Tesseract not found at any known location (tried bundled, Program Files, and PATH). Last tried: {}",
-                    tesseract_path.display()
-                )
-            }))
-        }
+        Err(_e) => Ok(serde_json::json!({
+            "available": false,
+            "path_checked": tesseract_path.to_string_lossy(),
+            "error": format!(
+                "Tesseract not found at any known location (tried bundled, Program Files, and PATH). Last tried: {}",
+                tesseract_path.display()
+            )
+        })),
     }
 }
 
 #[tauri::command]
 async fn open_region_picker(app: tauri::AppHandle) -> Result<(), String> {
-    println!("[SigLock] open_region_picker command called from frontend");
-
-    // Always close any existing picker first to avoid stale giant overlay
-    if let Some(existing) = app.get_webview_window("region-picker") {
-        println!("[SigLock] Closing stale region-picker window before opening new one");
-        let _ = existing.close();
-        // Give it a moment to actually close
-        tokio::time::sleep(tokio::time::Duration::from_millis(120)).await;
+    if app.get_webview_window("region_picker").is_some() {
+        return Ok(());
     }
 
-    println!("[SigLock] Creating new region-picker window...");
-
-    // Create picker window with explicit flags
-    let picker = tauri::WebviewWindowBuilder::new(
+    tauri::WebviewWindowBuilder::new(
         &app,
-        "region-picker",
+        "region_picker",
         tauri::WebviewUrl::App("/region-picker".into()),
     )
     .title("Select Scan Region")
@@ -606,26 +827,8 @@ async fn open_region_picker(app: tauri::AppHandle) -> Result<(), String> {
     .visible(true)
     .build()
     .map_err(|e| e.to_string())?;
-
-    println!("[SigLock] region-picker window created successfully");
-    println!("[SigLock] transparent flag applied via builder + config");
-    println!("[SigLock] always-on-top flag applied via builder + runtime");
-
-    // Apply runtime flags for reliability (especially important for borderless/windowed games)
-    let _ = picker.set_decorations(false);
-    println!("[SigLock] decorations set to false");
-
-    let _ = picker.set_resizable(false);
-
-    let _ = picker.set_always_on_top(true);
-    println!("[SigLock] always-on-top applied");
-
-    let _ = picker.set_skip_taskbar(true);
-
-    // Ensure it is shown and focused on top
-    let _ = picker.show();
-    let _ = picker.set_focus();
-    println!("[SigLock] picker shown and focused");
+    log_window_lifecycle(&app, "region_picker", "create", "set_region");
+    log_window_lifecycle(&app, "region_picker", "show", "set_region");
 
     Ok(())
 }
@@ -636,8 +839,15 @@ async fn open_region_picker(app: tauri::AppHandle) -> Result<(), String> {
 async fn scan_selected_region(
     state: State<'_, AppState>,
     config: Option<OcrConfig>,
+    trigger: Option<String>,
     app: tauri::AppHandle,
 ) -> Result<OcrScanResult, String> {
+    let context = if trigger.as_deref() == Some("Active") {
+        "auto_scan"
+    } else {
+        "manual_scan"
+    };
+    log_window_lifecycle(&app, "none", "audit_no_window_action", context);
     let region = {
         let s = state.lock().unwrap();
         s.region.clone()
@@ -660,8 +870,6 @@ async fn scan_selected_region(
     let cfg = config.unwrap_or_default();
     perform_real_ocr_scan(region.unwrap(), cfg, &app)
 }
-
-
 
 fn mock_ocr_scan(test_value: u32) -> Result<OcrScanResult, String> {
     let raw = test_value.to_string();
@@ -724,7 +932,7 @@ fn preprocess_for_ocr(img: image::DynamicImage, config: &OcrConfig) -> image::Dy
 
     // 5. Optional simple sharpen (using unsharp mask approximation via resize trick or just skip for now if complex)
     // For simplicity in this pass, we skip advanced sharpen. Can be added later.
-    let mut result = image::DynamicImage::ImageLuma8(final_luma);
+    let result = image::DynamicImage::ImageLuma8(final_luma);
 
     // Very basic contrast boost if no threshold (optional future)
     if !config.threshold_enabled {
@@ -749,11 +957,15 @@ fn run_tesseract_ocr(
 
     let tesseract_path = resolve_tesseract_executable(Some(app));
 
-    let mut cmd = std::process::Command::new(tesseract_path);
+    let mut cmd = background_command(tesseract_path);
     cmd.arg(&input_path).arg("stdout");
 
     // PSM
-    let psm = if [7, 8, 13].contains(&config.psm) { config.psm } else { 7 };
+    let psm = if [7, 8, 13].contains(&config.psm) {
+        config.psm
+    } else {
+        7
+    };
     cmd.arg("--psm").arg(psm.to_string());
 
     // Numeric whitelist if requested
@@ -761,8 +973,12 @@ fn run_tesseract_ocr(
         cmd.arg("-c").arg("tessedit_char_whitelist=0123456789");
     }
 
-    let output = cmd.output()
-        .map_err(|e| format!("Failed to execute tesseract (is it installed and in PATH?): {}", e))?;
+    let output = cmd.output().map_err(|e| {
+        format!(
+            "Failed to execute tesseract (is it installed and in PATH?): {}",
+            e
+        )
+    })?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -790,7 +1006,13 @@ fn perform_real_ocr_scan(
 
     for screen in &screens {
         let di = &screen.display_info;
-        let overlap = calculate_overlap(region.x, region.y, region.width as i32, region.height as i32, di);
+        let overlap = calculate_overlap(
+            region.x,
+            region.y,
+            region.width as i32,
+            region.height as i32,
+            di,
+        );
         if overlap > best_overlap {
             best_overlap = overlap;
             best_screen = screen;
@@ -827,8 +1049,9 @@ fn perform_real_ocr_scan(
         Ok(text) => text,
         Err(e) => {
             // Special handling for missing Tesseract - return graceful error instead of failing the command
-            if e.to_lowercase().contains("tesseract") && 
-               (e.to_lowercase().contains("not found") || e.to_lowercase().contains("program not found")) 
+            if e.to_lowercase().contains("tesseract")
+                && (e.to_lowercase().contains("not found")
+                    || e.to_lowercase().contains("program not found"))
             {
                 return Ok(OcrScanResult {
                     raw_text: String::new(),
@@ -873,7 +1096,13 @@ fn perform_real_ocr_scan(
     })
 }
 
-fn calculate_overlap(reg_x: i32, reg_y: i32, reg_w: i32, reg_h: i32, di: &screenshots::display_info::DisplayInfo) -> i64 {
+fn calculate_overlap(
+    reg_x: i32,
+    reg_y: i32,
+    reg_w: i32,
+    reg_h: i32,
+    di: &screenshots::display_info::DisplayInfo,
+) -> i64 {
     let screen_left = di.x;
     let screen_top = di.y;
     let screen_right = screen_left + di.width as i32;
@@ -901,7 +1130,9 @@ async fn capture_region_preview(
 ) -> Result<CaptureResult, String> {
     let region = {
         let s = state.lock().unwrap();
-        s.region.clone().ok_or_else(|| "No region selected. Click 'Set Region' first.".to_string())?
+        s.region
+            .clone()
+            .ok_or_else(|| "No region selected. Click 'Set Region' first.".to_string())?
     };
 
     // Validate region size
@@ -917,7 +1148,8 @@ async fn capture_region_preview(
         });
     }
 
-    let screens = screenshots::Screen::all().map_err(|e| format!("Failed to enumerate screens: {}", e))?;
+    let screens =
+        screenshots::Screen::all().map_err(|e| format!("Failed to enumerate screens: {}", e))?;
 
     // Find the screen that contains (or is closest to) the region top-left
     let mut best_screen = &screens[0];
@@ -960,14 +1192,19 @@ async fn capture_region_preview(
             std::fs::create_dir_all(&captures_dir).map_err(|e| e.to_string())?;
 
             let file_path = captures_dir.join("last_capture.png");
-            image.save(&file_path).map_err(|e| format!("Failed to save capture: {}", e))?;
+            image
+                .save(&file_path)
+                .map_err(|e| format!("Failed to save capture: {}", e))?;
 
             println!("[Capture] Saved raw crop to: {}", file_path.display());
 
             // Generate base64 data URL for reliable preview (preferred for debug)
             // Read the file we just saved — most reliable across image crate versions
             let preview_data_url = match std::fs::read(&file_path) {
-                Ok(bytes) => Some(format!("data:image/png;base64,{}", general_purpose::STANDARD.encode(&bytes))),
+                Ok(bytes) => Some(format!(
+                    "data:image/png;base64,{}",
+                    general_purpose::STANDARD.encode(&bytes)
+                )),
                 Err(_) => None,
             };
 
@@ -981,17 +1218,18 @@ async fn capture_region_preview(
                 preview_data_url,
             })
         }
-        Err(e) => {
-            Ok(CaptureResult {
-                success: false,
-                width: region.width,
-                height: region.height,
-                image_path: None,
-                captured_at: chrono::Utc::now().to_rfc3339(),
-                error: Some(format!("Capture failed: {}. Check region coordinates and scaling.", e)),
-                preview_data_url: None,
-            })
-        }
+        Err(e) => Ok(CaptureResult {
+            success: false,
+            width: region.width,
+            height: region.height,
+            image_path: None,
+            captured_at: chrono::Utc::now().to_rfc3339(),
+            error: Some(format!(
+                "Capture failed: {}. Check region coordinates and scaling.",
+                e
+            )),
+            preview_data_url: None,
+        }),
     }
 }
 
@@ -999,11 +1237,7 @@ async fn capture_region_preview(
 
 /// Starts the single active scan timer task if not already running.
 /// The task respects: active_scan_enabled + has region + user interval.
-fn start_active_scan_timer(
-    app: tauri::AppHandle,
-    app_state: AppState,
-    interval_ms: u64,
-) {
+fn start_active_scan_timer(app: tauri::AppHandle, app_state: AppState, interval_ms: u64) {
     let safe_interval = clamp_scan_interval(interval_ms);
 
     let controller_state: State<'_, ActiveScanControllerState> = app.state();
@@ -1044,10 +1278,13 @@ fn start_active_scan_timer(
 
             // Timer tick — in real use this will trigger capture + OCR.
             // For now we emit an event (frontend or future mock can respond).
-            let _ = app_handle.emit("timer-scan-tick", serde_json::json!({
-                "timestamp": chrono::Utc::now().to_rfc3339(),
-                "interval_ms": current_interval
-            }));
+            let _ = app_handle.emit(
+                "timer-scan-tick",
+                serde_json::json!({
+                    "timestamp": chrono::Utc::now().to_rfc3339(),
+                    "interval_ms": current_interval
+                }),
+            );
         }
     });
 
@@ -1067,31 +1304,36 @@ fn stop_active_scan_timer(controller_state: ActiveScanControllerState) {
 
 fn register_default_hotkeys(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let show_hide_shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyM);
-    let toggle_active_shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyO);
+    let toggle_active_shortcut =
+        Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyO);
 
-    app.global_shortcut().on_shortcut(show_hide_shortcut, move |app, _shortcut, event| {
-        if event.state() == ShortcutState::Pressed {
-            if let Some(window) = app.get_webview_window("overlay") {
-                if window.is_visible().unwrap_or(false) {
-                    let _ = window.hide();
-                } else {
-                    let _ = window.set_always_on_top(true);
-                    let _ = window.show();
+    app.global_shortcut()
+        .on_shortcut(show_hide_shortcut, move |app, _shortcut, event| {
+            if event.state() == ShortcutState::Pressed {
+                if let Some(window) = app.get_webview_window("overlay") {
+                    if window.is_visible().unwrap_or(false) {
+                        let _ = window.hide();
+                        log_window_lifecycle(app, "overlay", "hide", "overlay_update");
+                    } else {
+                        let _ = window.set_always_on_top(true);
+                        let _ = window.show();
+                        log_window_lifecycle(app, "overlay", "show", "overlay_update");
+                    }
+                    let visible = window.is_visible().unwrap_or(false);
+                    if let Ok(mut state) = app.state::<AppState>().lock() {
+                        state.overlay_visible = visible;
+                    }
+                    let _ = app.emit("overlay-visibility-changed", visible);
                 }
-                let visible = window.is_visible().unwrap_or(false);
-                if let Ok(mut state) = app.state::<AppState>().lock() {
-                    state.overlay_visible = visible;
-                }
-                let _ = app.emit("overlay-visibility-changed", visible);
             }
-        }
-    })?;
+        })?;
 
-    app.global_shortcut().on_shortcut(toggle_active_shortcut, move |app, _shortcut, event| {
-        if event.state() == ShortcutState::Pressed {
-            let _ = app.emit("hotkey-toggle-active", ());
-        }
-    })?;
+    app.global_shortcut()
+        .on_shortcut(toggle_active_shortcut, move |app, _shortcut, event| {
+            if event.state() == ShortcutState::Pressed {
+                let _ = app.emit("hotkey-toggle-active", ());
+            }
+        })?;
 
     println!("[SigLock] Default hotkeys registered successfully");
     Ok(())
@@ -1169,9 +1411,12 @@ mod tests {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let state: AppState = Arc::new(Mutex::new(default_state()));
-    let timer_controller: ActiveScanControllerState = Arc::new(Mutex::new(ActiveScanController::default()));
+    let timer_controller: ActiveScanControllerState =
+        Arc::new(Mutex::new(ActiveScanController::default()));
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
@@ -1182,7 +1427,6 @@ pub fn run() {
             toggle_overlay_visibility,
             get_overlay_setup_mode,
             set_overlay_setup_mode,
-            resize_overlay_to_content,
             reset_overlay_position,
             set_scan_now_mouse_binding,
             trigger_single_scan,
@@ -1199,16 +1443,21 @@ pub fn run() {
         ])
         .setup(move |app| {
             let native_settings = load_native_settings(&app.handle());
+            log_window_lifecycle(&app.handle(), "main", "create", "startup");
+            log_window_lifecycle(&app.handle(), "main", "show", "startup");
             if let Ok(mut current_state) = state.lock() {
                 current_state.region = native_settings.region.clone();
             }
             if let Some(overlay) = app.get_webview_window("overlay") {
+                log_window_lifecycle(&app.handle(), "overlay", "create", "startup");
+                log_window_lifecycle(&app.handle(), "overlay", "show", "startup");
                 let _ = overlay.set_always_on_top(true);
                 let _ = overlay.set_ignore_cursor_events(true);
-                if let Some((x, y)) = native_settings.overlay_position {
-                    let _ = overlay.set_position(Position::Physical(PhysicalPosition::new(x, y)));
-                }
+                let position = safe_overlay_position(&overlay, native_settings.overlay_position);
+                let _ = overlay.set_position(Position::Physical(position));
+                log_window_lifecycle(&app.handle(), "overlay", "set_position", "startup");
             }
+            suppress_tao_event_target_artifact(&app.handle());
             start_scan_mouse_hook(app.handle().clone());
 
             if let Err(e) = register_default_hotkeys(&app.handle()) {
@@ -1223,6 +1472,11 @@ pub fn run() {
             if window.label() == "overlay" {
                 if let WindowEvent::Moved(position) = event {
                     let _ = save_overlay_position(&window.app_handle(), *position);
+                }
+            }
+            if window.label() == "region_picker" {
+                if let WindowEvent::Destroyed = event {
+                    log_window_lifecycle(&window.app_handle(), "region_picker", "close", "set_region");
                 }
             }
         })
