@@ -1,0 +1,49 @@
+# dependencies
+node_modules/
+
+# SvelteKit / Vite
+.svelte-kit/
+.vite/
+dist/
+build/
+/package/
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# Tauri / Rust build output
+target/
+src-tauri/target/
+
+# Release artifacts
+release/
+*.exe
+*.msi
+*.pdb
+*.zip
+
+# env / local config
+.env
+.env.*
+!.env.example
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Siglock local/debug runtime output
+captures/
+debug/
+app_data/
+siglock.json
+last_capture.png
+last_preprocessed.png
+src-tauri/captures/
+src-tauri/debug/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
