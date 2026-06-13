@@ -1,10 +1,23 @@
-# Siglock
+# SigLock
 
-Siglock is a lightweight desktop overlay for Star Citizen mining. It watches a user-selected scan region, reads visible scan signature values with OCR, and matches those values against a local signature table to identify likely mineable materials and rock counts.
+SigLock is a lightweight desktop overlay for Star Citizen mining. It watches a user-selected scan region, reads visible scan signature values with OCR, and matches those values against a local signature table to identify likely mineable materials and rock counts.
+
+The current closed-beta release is **v0.1.0-beta.1**. It is a GitHub
+pre-release and should not be treated as a stable build. The Windows installer
+is named `SigLock_Setup_0.1.0-beta.1.exe`.
+
+## Public beta safety and privacy
+
+* SigLock runs OCR locally on your computer.
+* It does not require Star Citizen login credentials.
+* It does not modify game files.
+* It does not inject into the game process.
+* It does not automate gameplay input.
+* It does not send screenshots or OCR data to a server.
 
 ## What it does
 
-Siglock helps miners quickly interpret Star Citizen scan signatures without manually checking a table mid-flight.
+SigLock helps miners quickly interpret Star Citizen scan signatures without manually checking a table mid-flight.
 
 Core features:
 
@@ -20,7 +33,7 @@ Core features:
 
 ## Current status
 
-Siglock is currently in early development.
+SigLock is currently in closed beta.
 
 Working:
 
@@ -36,7 +49,7 @@ In progress:
 * Active Scan reliability
 * Rolling scan history
 * Better window dragging and overlay UX
-* Release packaging / installer support
+* Public beta feedback and release hardening
 
 Planned:
 
@@ -117,6 +130,6 @@ The number of values defines the valid rock/signature counts for that entry. Sig
 
 ## Notes
 
-Siglock is designed to be local, lightweight, and focused. It does not use accounts, cloud sync, telemetry, or external databases.
+SigLock is designed to be local, lightweight, and focused. It does not use accounts, cloud sync, telemetry, or external databases.
 
 Star Citizen is a trademark of Cloud Imperium Games. This project is unofficial and not affiliated with or endorsed by Cloud Imperium Games.

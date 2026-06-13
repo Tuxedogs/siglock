@@ -6,19 +6,15 @@ SigLock uses Tauri's signed updater and GitHub Releases. Installed copies check:
 
 ## One-time GitHub setup
 
-The updater private key is stored locally at:
-
-`LOCAL_UPDATER_KEY_PATH`
-
-Back up that file somewhere secure. Never commit or share it. Losing it prevents
-existing installations from trusting future updates.
+Generate and securely back up a Tauri updater signing key outside the
+repository. Never commit or share the private key. Losing it prevents existing
+installations from trusting future updates.
 
 In the GitHub repository, open **Settings > Secrets and variables > Actions** and
 create these repository secrets:
 
-- `TAURI_SIGNING_PRIVATE_KEY`: the complete contents of `siglock-updater.key`
-
-The current key has no password, so no password secret is required.
+- `TAURI_SIGNING_PRIVATE_KEY`: the complete contents of the updater private key
+- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`: required only when the key is password-protected
 
 ## Publish a release
 
@@ -38,3 +34,6 @@ The current key has no password, so no password secret is required.
 
 Users can then select **Check Updates** inside SigLock. Tauri downloads the
 signed installer, verifies it, installs it, and relaunches the app.
+
+Release installers and other generated binaries belong in GitHub Releases, not
+in the source repository.
