@@ -2,6 +2,7 @@ import { Store } from '@tauri-apps/plugin-store';
 
 export interface SigLockSettings {
   scanNowKeybind: string;
+  toggleAutoScanKeybind: string;
   activeScanIntervalMs: number;
   overlayTextColor: string;
   overlayBackgroundColor: string;
@@ -10,12 +11,14 @@ export interface SigLockSettings {
   overlayFontSize: number;
   overlayHighContrast: boolean;
   overlayCompactMode: boolean;
+  showScannedValueOnOverlay: boolean;
   overlayResultLifetimeSeconds: number;
   rollingHistoryLimit: number;
 }
 
 export const DEFAULT_SETTINGS: SigLockSettings = {
   scanNowKeybind: 'Ctrl+Alt+F9',
+  toggleAutoScanKeybind: 'Ctrl+Shift+S',
   activeScanIntervalMs: 3000,
   overlayTextColor: '#e5e7eb',
   overlayBackgroundColor: '#0f1115',
@@ -24,6 +27,7 @@ export const DEFAULT_SETTINGS: SigLockSettings = {
   overlayFontSize: 13,
   overlayHighContrast: true,
   overlayCompactMode: true,
+  showScannedValueOnOverlay: false,
   overlayResultLifetimeSeconds: 20,
   rollingHistoryLimit: 30,
 };
@@ -46,6 +50,9 @@ export function sanitizeSettings(value: unknown): SigLockSettings {
     scanNowKeybind: typeof raw.scanNowKeybind === 'string' && raw.scanNowKeybind.trim().length > 0
       ? raw.scanNowKeybind
       : DEFAULT_SETTINGS.scanNowKeybind,
+    toggleAutoScanKeybind: typeof raw.toggleAutoScanKeybind === 'string' && raw.toggleAutoScanKeybind.trim().length > 0
+      ? raw.toggleAutoScanKeybind
+      : DEFAULT_SETTINGS.toggleAutoScanKeybind,
     activeScanIntervalMs: numberInRange(raw.activeScanIntervalMs, DEFAULT_SETTINGS.activeScanIntervalMs, 1000, 4000),
     overlayTextColor: color(raw.overlayTextColor, DEFAULT_SETTINGS.overlayTextColor),
     overlayBackgroundColor: color(raw.overlayBackgroundColor, DEFAULT_SETTINGS.overlayBackgroundColor),
@@ -54,6 +61,7 @@ export function sanitizeSettings(value: unknown): SigLockSettings {
     overlayFontSize: numberInRange(raw.overlayFontSize, DEFAULT_SETTINGS.overlayFontSize, 11, 20),
     overlayHighContrast: typeof raw.overlayHighContrast === 'boolean' ? raw.overlayHighContrast : DEFAULT_SETTINGS.overlayHighContrast,
     overlayCompactMode: typeof raw.overlayCompactMode === 'boolean' ? raw.overlayCompactMode : DEFAULT_SETTINGS.overlayCompactMode,
+    showScannedValueOnOverlay: typeof raw.showScannedValueOnOverlay === 'boolean' ? raw.showScannedValueOnOverlay : DEFAULT_SETTINGS.showScannedValueOnOverlay,
     overlayResultLifetimeSeconds: numberInRange(raw.overlayResultLifetimeSeconds, DEFAULT_SETTINGS.overlayResultLifetimeSeconds, 5, 120),
     rollingHistoryLimit: numberInRange(raw.rollingHistoryLimit, DEFAULT_SETTINGS.rollingHistoryLimit, 25, 50),
   };

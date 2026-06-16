@@ -122,3 +122,32 @@ export function matchObservedValue(
 ): MatchResult[] {
   return findMatches(observed, tolerance);
 }
+
+export function findNearestSignature(observed: number): MatchResult | null {
+  if (!observed || observed < 100) return null;
+
+  let nearest: MatchResult | null = null;
+  for (const mat of materials) {
+    for (const entry of mat.signatures) {
+      if (entry.value === null || entry.value === undefined) continue;
+
+      const expected = entry.value;
+      const delta = observed - expected;
+      const candidate: MatchResult = {
+        material: mat.materialName,
+        rockCount: entry.rockCount,
+        expected,
+        observed,
+        delta,
+        matchType: delta === 0 ? 'exact' : 'near',
+        confidence: 0,
+      };
+
+      if (!nearest || Math.abs(candidate.delta) < Math.abs(nearest.delta)) {
+        nearest = candidate;
+      }
+    }
+  }
+
+  return nearest;
+}

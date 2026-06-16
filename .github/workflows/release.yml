@@ -52,7 +52,13 @@ jobs:
         with:
           tagName: v__VERSION__
           releaseName: ${{ steps.release_meta.outputs.title }}
-          releaseBody: Closed beta build. Download the setup executable below. Existing beta installations can update from inside the app.
+          releaseBody: |
+            SigLock v0.1.0 Beta 2 closed beta build.
+
+            Beta 1 users must manually download and install this build because beta.1 did not include in-app update checking.
+            Starting with beta.2, update checking is available from Settings after the updater manifest is published and validated.
+
+            Download the Windows setup executable below.
           releaseDraft: false
           prerelease: false
           uploadUpdaterJson: true

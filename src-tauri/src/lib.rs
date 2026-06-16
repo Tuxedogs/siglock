@@ -26,6 +26,10 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 static MOUSE_HOOK_APP: OnceLock<tauri::AppHandle> = OnceLock::new();
 #[cfg(windows)]
 static SCAN_MOUSE_BUTTON: AtomicU32 = AtomicU32::new(0);
+#[cfg(windows)]
+static AUTO_TOGGLE_MOUSE_BUTTON: AtomicU32 = AtomicU32::new(0);
+static SHUTDOWN_STARTED: AtomicBool = AtomicBool::new(false);
+static SHUTDOWN_DUPLICATE_LOGGED: AtomicBool = AtomicBool::new(false);
 
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
@@ -467,7 +471,7 @@ fn default_state() -> AppStateInner {
         last_source: None,
         hotkey_show_hide: "Ctrl+Shift+M".to_string(),
         hotkey_single_scan: "Ctrl+Alt+F9".to_string(),
-        hotkey_toggle_active: "Ctrl+Shift+O".to_string(),
+        hotkey_toggle_active: "Ctrl+Shift+S".to_string(),
         scan_interval_ms: 3000,
     }
 }
@@ -553,6 +557,40 @@ fn scan_mouse_button(binding: Option<&str>) -> Result<u32, String> {
     }
 }
 
+fn request_shutdown_once(app: &tauri::AppHandle, source: &str) {
+    if SHUTDOWN_STARTED
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
+        if !SHUTDOWN_DUPLICATE_LOGGED.swap(true, Ordering::SeqCst) {
+            log_window_lifecycle(app, "app", "shutdown_already_started", source);
+        }
+        return;
+    }
+
+    log_window_lifecycle(app, "app", "shutdown_start", source);
+    if let Ok(mut state) = app.state::<AppState>().lock() {
+        state.active_scan_enabled = false;
+        state.overlay_setup_mode = false;
+    }
+    log_window_lifecycle(app, "active_scan", "stop", "shutdown");
+
+    let controller: State<'_, ActiveScanControllerState> = app.state();
+    stop_active_scan_timer(controller.inner().clone());
+    log_window_lifecycle(app, "shortcuts", "unregister", "shutdown");
+
+    let _ = app.global_shortcut().unregister_all();
+    for (label, window) in app.webview_windows() {
+        if label != "main" {
+            log_window_lifecycle(app, &label, "close", "shutdown");
+            let _ = window.close();
+        }
+    }
+
+    log_window_lifecycle(app, "app", "exit", "shutdown");
+    app.exit(0);
+}
+
 #[cfg(windows)]
 fn mouse_button_from_message(message: u32, mouse_data: u32) -> u32 {
     match message {
@@ -588,6 +626,19 @@ async fn toggle_overlay_visibility(
     } else {
         Err("Overlay window not found".into())
     }
+}
+
+#[tauri::command]
+fn minimize_main_window(app: tauri::AppHandle) -> Result<(), String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "Main window not found".to_string())?;
+    window.minimize().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn request_app_shutdown(app: tauri::AppHandle) {
+    request_shutdown_once(&app, "frontend-close");
 }
 
 #[tauri::command]
@@ -643,6 +694,22 @@ fn set_scan_now_mouse_binding(binding: Option<String>) -> Result<(), String> {
     {
         let _ = binding;
         Err("Global mouse Scan Now bindings are not supported on this platform.".into())
+    }
+}
+
+#[tauri::command]
+fn set_auto_toggle_mouse_binding(binding: Option<String>) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        let button = scan_mouse_button(binding.as_deref())?;
+        AUTO_TOGGLE_MOUSE_BUTTON.store(button, Ordering::SeqCst);
+        return Ok(());
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = binding;
+        Err("Global mouse Auto Scan bindings are not supported on this platform.".into())
     }
 }
 
@@ -1304,8 +1371,6 @@ fn stop_active_scan_timer(controller_state: ActiveScanControllerState) {
 
 fn register_default_hotkeys(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let show_hide_shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyM);
-    let toggle_active_shortcut =
-        Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyO);
 
     app.global_shortcut()
         .on_shortcut(show_hide_shortcut, move |app, _shortcut, event| {
@@ -1328,13 +1393,6 @@ fn register_default_hotkeys(app: &tauri::AppHandle) -> Result<(), Box<dyn std::e
             }
         })?;
 
-    app.global_shortcut()
-        .on_shortcut(toggle_active_shortcut, move |app, _shortcut, event| {
-            if event.state() == ShortcutState::Pressed {
-                let _ = app.emit("hotkey-toggle-active", ());
-            }
-        })?;
-
     println!("[SigLock] Default hotkeys registered successfully");
     Ok(())
 }
@@ -1343,11 +1401,17 @@ fn register_default_hotkeys(app: &tauri::AppHandle) -> Result<(), Box<dyn std::e
 unsafe extern "system" fn scan_mouse_hook(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     if code >= 0 {
         let selected = SCAN_MOUSE_BUTTON.load(Ordering::SeqCst);
+        let selected_auto = AUTO_TOGGLE_MOUSE_BUTTON.load(Ordering::SeqCst);
         let data = (*(lparam as *const MSLLHOOKSTRUCT)).mouseData;
         let pressed = mouse_button_from_message(wparam as u32, data);
         if selected != 0 && pressed == selected {
             if let Some(app) = MOUSE_HOOK_APP.get() {
                 let _ = app.emit("scan-now-input", ());
+            }
+        }
+        if selected_auto != 0 && pressed == selected_auto {
+            if let Some(app) = MOUSE_HOOK_APP.get() {
+                let _ = app.emit("hotkey-toggle-active", ());
             }
         }
     }
@@ -1424,11 +1488,14 @@ pub fn run() {
         .manage(timer_controller.clone())
         .invoke_handler(tauri::generate_handler![
             match_signature,
+            minimize_main_window,
+            request_app_shutdown,
             toggle_overlay_visibility,
             get_overlay_setup_mode,
             set_overlay_setup_mode,
             reset_overlay_position,
             set_scan_now_mouse_binding,
+            set_auto_toggle_mouse_binding,
             trigger_single_scan,
             toggle_active_scan,
             set_scan_interval,
@@ -1463,12 +1530,19 @@ pub fn run() {
             if let Err(e) = register_default_hotkeys(&app.handle()) {
                 eprintln!("[SigLock] Failed to register hotkeys: {}", e);
             } else {
-                println!("[SigLock] Hotkeys registered: Ctrl+Shift+M (show/hide), Ctrl+Shift+O (toggle active)");
+                println!("[SigLock] Hotkeys registered: Ctrl+Shift+M (show/hide)");
             }
 
             Ok(())
         })
         .on_window_event(|window, event| {
+            if window.label() == "main" {
+                if let WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let app = window.app_handle();
+                    request_shutdown_once(&app, "window-close");
+                }
+            }
             if window.label() == "overlay" {
                 if let WindowEvent::Moved(position) = event {
                     let _ = save_overlay_position(&window.app_handle(), *position);

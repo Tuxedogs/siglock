@@ -1,24 +1,34 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
+  import { getVersion } from '@tauri-apps/api/app';
   import { invoke } from '@tauri-apps/api/core';
   import { emitTo, listen, type UnlistenFn } from '@tauri-apps/api/event';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { isRegistered, register, unregister } from '@tauri-apps/plugin-global-shortcut';
+  import { openUrl } from '@tauri-apps/plugin-opener';
   import { relaunch } from '@tauri-apps/plugin-process';
-  import { check } from '@tauri-apps/plugin-updater';
+  import { check, type Update } from '@tauri-apps/plugin-updater';
   import { dev } from '$app/environment';
-  import { matchObservedValue, type MatchResult } from '$lib/data/signatures';
+  import { findNearestSignature, matchObservedValue, type MatchResult } from '$lib/data/signatures';
   import { buildScanResultKey, isDuplicateResult, normalizeMaterial } from '$lib/scanDedupe';
   import { DEFAULT_SETTINGS, loadSettings, saveSettings, type SigLockSettings } from '$lib/settings';
 
   type Trigger = 'Manual' | 'Active';
-  type ScanStatus = 'matched' | 'no match' | 'failed' | 'skipped';
+  type ScanStatus = 'matched' | 'no match' | 'invalid' | 'failed' | 'skipped';
+  type ShortcutAction = 'manual' | 'auto';
   type HistoryEntry = {
     id: number;
     timestamp: string;
     trigger: Trigger;
     material: string;
     rawValue: string;
+    parsedNumber: number | null;
+    normalizedAttemptValue: string | null;
+    matchedValue: number | null;
+    nearestCandidateMaterial: string | null;
+    nearestCandidateValue: number | null;
+    delta: number | null;
+    rockCount: number | null;
     confidence: number | null;
     status: ScanStatus;
     durationMs: number;
@@ -28,6 +38,8 @@
     key: string;
     material: string;
     rockCount: number;
+    valueLabel?: string;
+    detailLabel?: string;
     repeatCount: number;
     updatedAt: string;
   };
@@ -37,6 +49,15 @@
     historyId: number;
     overlayKeys: string[];
   };
+  type ReleaseNoteVersion = {
+    version: string;
+    date?: string;
+    items: string[];
+    url?: string;
+  };
+
+  const GITHUB_RELEASES_API = 'https://api.github.com/repos/Tuxedogs/siglock/releases';
+  const GITHUB_RELEASES_URL = 'https://github.com/Tuxedogs/siglock/releases';
 
   const ocrConfig = {
     upscale: 2,
@@ -50,7 +71,6 @@
   };
 
   let settings = $state<SigLockSettings>({ ...DEFAULT_SETTINGS });
-  let settingsReady = $state(false);
   let observed = $state('3885');
   let tolerance = $state(25);
   let matches = $state<MatchResult[]>([]);
@@ -70,13 +90,23 @@
   let lastScanTime = $state<string | null>(null);
   let lastScanSummary = $state('Never scanned');
   let capturingKeybind = $state(false);
+  let capturingShortcutAction = $state<ShortcutAction | null>(null);
   let keybindError = $state<string | null>(null);
   let historyFilter = $state<'all' | 'matches' | 'issues'>('all');
   let capturePreviewUrl = $state<string | null>(null);
   let debugResult = $state<any>(null);
   let overlayError = $state<string | null>(null);
-  let updateStatus = $state('Check Updates');
+  let appVersion = $state<string | null>(null);
+  let updateStatus = $state<string | null>(null);
   let updating = $state(false);
+  let latestKnownVersion = $state<string | null>(null);
+  let latestKnownNotes = $state<string | null>(null);
+  let releaseNotesOpen = $state(false);
+  let releaseNotesLoading = $state(false);
+  let releaseNotesError = $state(false);
+  let releaseNotes = $state<ReleaseNoteVersion[]>([]);
+  let settingsOpen = $state(false);
+  let openSettingsSection = $state<'shortcuts' | 'scan' | 'overlay' | 'advanced'>('shortcuts');
   let unlisteners: UnlistenFn[] = [];
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -113,11 +143,28 @@
         key,
         material: match.material,
         rockCount: match.rockCount,
+        valueLabel: rawValue.replace(/\D/g, '') || rawValue,
+        detailLabel: String(match.expected),
         repeatCount: (existing?.repeatCount ?? 0) + 1,
         updatedAt,
       };
-      overlayMatches = [next, ...overlayMatches.filter((item) => item !== existing)].slice(0, 3);
+      overlayMatches = [next, ...overlayMatches.filter((item) => item !== existing && item.rockCount > 0)].slice(0, 3);
     }
+    void publishOverlayMatches();
+  }
+
+  function showOverlayRead(material: string, valueLabel: string, detailLabel?: string) {
+    if (!settings.showScannedValueOnOverlay) return;
+    const updatedAt = new Date().toISOString();
+    overlayMatches = [{
+      key: `${normalizeMaterial(material)}|0|${valueLabel}|${updatedAt}`,
+      material,
+      rockCount: 0,
+      valueLabel,
+      detailLabel,
+      repeatCount: 1,
+      updatedAt,
+    }, ...overlayMatches.filter((item) => item.rockCount > 0)].slice(0, 3);
     void publishOverlayMatches();
   }
 
@@ -133,9 +180,9 @@
   }
 
   function addHistory(entry: Omit<HistoryEntry, 'id' | 'repeatCount'>) {
-    const signature = `${entry.status}|${entry.material}|${entry.rawValue}`;
+    const signature = `${entry.status}|${entry.material}|${entry.rawValue}|${entry.normalizedAttemptValue}`;
     const first = history[0];
-    const firstSignature = first ? `${first.status}|${first.material}|${first.rawValue}` : '';
+    const firstSignature = first ? `${first.status}|${first.material}|${first.rawValue}|${first.normalizedAttemptValue}` : '';
     if (first && signature === firstSignature) {
       history = [{ ...first, timestamp: entry.timestamp, trigger: entry.trigger, durationMs: entry.durationMs, repeatCount: first.repeatCount + 1 }, ...history.slice(1)];
     } else {
@@ -160,16 +207,35 @@
     }
   }
 
+  function skippedEntry(trigger: Trigger, material: string): Omit<HistoryEntry, 'id' | 'repeatCount'> {
+    return {
+      timestamp: new Date().toISOString(),
+      trigger,
+      material,
+      rawValue: '-',
+      parsedNumber: null,
+      normalizedAttemptValue: null,
+      matchedValue: null,
+      nearestCandidateMaterial: null,
+      nearestCandidateValue: null,
+      delta: null,
+      rockCount: null,
+      confidence: null,
+      status: 'skipped',
+      durationMs: 0,
+    };
+  }
+
   async function performScan(trigger: Trigger) {
     if (!hasRegion) {
       scannerStatus = 'Scan skipped: set a region first.';
-      addHistory({ timestamp: new Date().toISOString(), trigger, material: 'No region', rawValue: '-', confidence: null, status: 'skipped', durationMs: 0 });
+      addHistory(skippedEntry(trigger, 'No region'));
       return;
     }
     if (isScanning) {
       queuedTrigger = queuedTrigger ?? trigger;
       scannerStatus = 'Scan queued: already scanning.';
-      addHistory({ timestamp: new Date().toISOString(), trigger, material: 'Already scanning', rawValue: '-', confidence: null, status: 'skipped', durationMs: 0 });
+      addHistory(skippedEntry(trigger, 'Already scanning'));
       return;
     }
 
@@ -181,19 +247,37 @@
       debugResult = result;
       const rawValue = result?.raw_text || (result?.normalized_value?.toString() ?? '-');
       const durationMs = Math.round(performance.now() - started);
-      const normalized = result?.normalized_value;
+      const normalized = typeof result?.normalized_value === 'number' ? result.normalized_value : null;
       const normalizedSignature = normalized?.toString() ?? rawValue.replace(/\D/g, '');
       const nextMatches = normalized ? matchObservedValue(normalized, tolerance) : [];
+      const nearest = normalized ? findNearestSignature(normalized) : null;
       matches = nextMatches;
       ocrError = result?.error || null;
       lastScanTime = new Date().toLocaleTimeString();
 
-      const status: ScanStatus = result?.error ? 'failed' : nextMatches.length ? 'matched' : 'no match';
+      const status: ScanStatus = result?.error ? 'invalid' : nextMatches.length ? 'matched' : normalized ? 'no match' : 'invalid';
       const material = nextMatches.length ? nextMatches.map((match) => match.material).join(', ') : (result?.error || 'No match');
       const confidence = nextMatches[0]?.confidence ?? result?.confidence ?? null;
       lastScanSummary = status === 'matched' ? `${material} (${rawValue})` : `${status}: ${rawValue}`;
       scannerStatus = `${trigger} scan ${status}`;
       const timestamp = result?.scanned_at || new Date().toISOString();
+      const baseHistory: Omit<HistoryEntry, 'id' | 'repeatCount'> = {
+        timestamp,
+        trigger,
+        material,
+        rawValue,
+        parsedNumber: normalized,
+        normalizedAttemptValue: normalizedSignature || null,
+        matchedValue: nextMatches[0]?.expected ?? null,
+        nearestCandidateMaterial: nearest?.material ?? null,
+        nearestCandidateValue: nearest?.expected ?? null,
+        delta: nearest?.delta ?? null,
+        rockCount: nextMatches[0]?.rockCount ?? null,
+        confidence,
+        status,
+        durationMs,
+      };
+
       if (status === 'matched') {
         const now = Date.now();
         const key = buildScanResultKey(nextMatches, normalizedSignature);
@@ -202,7 +286,7 @@
           scannerStatus = trigger === 'Manual' ? 'Duplicate suppressed' : `${trigger} scan duplicate suppressed`;
         } else {
           addOverlayMatches(nextMatches, normalizedSignature);
-          addHistory({ timestamp, trigger, material, rawValue, confidence, status, durationMs });
+          addHistory(baseHistory);
           lastAcceptedScan = {
             key,
             acceptedAt: now,
@@ -211,13 +295,33 @@
           };
         }
       } else {
-        addHistory({ timestamp, trigger, material, rawValue, confidence, status, durationMs });
+        addHistory(baseHistory);
+        if (status === 'no match') {
+          showOverlayRead('No match', `Read: ${normalizedSignature}`, nearest ? `nearest: ${nearest.material} ${nearest.expected}` : undefined);
+        } else if (status === 'invalid') {
+          showOverlayRead('Invalid read', `Raw: ${rawValue}`);
+        }
       }
     } catch (error) {
       const message = `OCR scan failed: ${String(error)}`;
       ocrError = message;
       scannerStatus = message;
-      addHistory({ timestamp: new Date().toISOString(), trigger, material: message, rawValue: '-', confidence: null, status: 'failed', durationMs: Math.round(performance.now() - started) });
+      addHistory({
+        timestamp: new Date().toISOString(),
+        trigger,
+        material: message,
+        rawValue: '-',
+        parsedNumber: null,
+        normalizedAttemptValue: null,
+        matchedValue: null,
+        nearestCandidateMaterial: null,
+        nearestCandidateValue: null,
+        delta: null,
+        rockCount: null,
+        confidence: null,
+        status: 'failed',
+        durationMs: Math.round(performance.now() - started),
+      });
     } finally {
       isScanning = false;
       const followUp = queuedTrigger;
@@ -267,6 +371,19 @@
     if (event.button === 0) void getCurrentWindow().startDragging();
   }
 
+  async function minimizeWindow() {
+    await invoke('minimize_main_window');
+  }
+
+  async function closeApp() {
+    await invoke('request_app_shutdown');
+  }
+
+  function displayVersion(version: string | null) {
+    if (!version) return 'v...';
+    return version.startsWith('v') ? version : `v${version}`;
+  }
+
   async function updateInterval() {
     settings.activeScanIntervalMs = Math.min(4000, Math.max(1000, Math.round(settings.activeScanIntervalMs / 1000) * 1000));
     settings.activeScanIntervalMs = await invoke<number>('set_scan_interval', { intervalMs: settings.activeScanIntervalMs });
@@ -278,34 +395,80 @@
     return ['Middle Mouse', 'Mouse4', 'Mouse5'].includes(binding);
   }
 
-  async function applyScanKeybind(binding: string, previous: string) {
+  function shortcutBinding(action: ShortcutAction) {
+    return action === 'manual' ? settings.scanNowKeybind : settings.toggleAutoScanKeybind;
+  }
+
+  function shortcutDefault(action: ShortcutAction) {
+    return action === 'manual' ? DEFAULT_SETTINGS.scanNowKeybind : DEFAULT_SETTINGS.toggleAutoScanKeybind;
+  }
+
+  function shortcutMouseCommand(action: ShortcutAction) {
+    return action === 'manual' ? 'set_scan_now_mouse_binding' : 'set_auto_toggle_mouse_binding';
+  }
+
+  function runShortcutAction(action: ShortcutAction) {
+    if (action === 'manual') void performScan('Manual');
+    else void toggleActiveScan();
+  }
+
+  function setShortcutBinding(action: ShortcutAction, binding: string) {
+    if (action === 'manual') settings.scanNowKeybind = binding;
+    else settings.toggleAutoScanKeybind = binding;
+  }
+
+  function otherShortcutBinding(action: ShortcutAction) {
+    return action === 'manual' ? settings.toggleAutoScanKeybind : settings.scanNowKeybind;
+  }
+
+  async function applyShortcut(action: ShortcutAction, binding: string, previous: string) {
     if (binding === previous) return;
+    if (binding === otherShortcutBinding(action)) {
+      throw new Error('That shortcut is already assigned to another action.');
+    }
+
     if (isMouseBinding(binding)) {
-      await invoke('set_scan_now_mouse_binding', { binding });
+      await invoke(shortcutMouseCommand(action), { binding });
       try {
         if (!isMouseBinding(previous) && await isRegistered(previous)) await unregister(previous);
       } catch (error) {
-        await invoke('set_scan_now_mouse_binding', { binding: null });
+        await invoke(shortcutMouseCommand(action), { binding: null });
         throw error;
       }
       return;
     }
 
     await register(binding, (event) => {
-      if (event.state === 'Pressed' && !capturingKeybind) void performScan('Manual');
+      if (event.state === 'Pressed' && !capturingKeybind) runShortcutAction(action);
     });
     try {
-      await invoke('set_scan_now_mouse_binding', { binding: null });
+      await invoke(shortcutMouseCommand(action), { binding: null });
       if (!isMouseBinding(previous) && await isRegistered(previous)) await unregister(previous);
     } catch (error) {
       await unregister(binding).catch(() => {});
       if (!isMouseBinding(previous) && !await isRegistered(previous)) {
         await register(previous, (event) => {
-          if (event.state === 'Pressed' && !capturingKeybind) void performScan('Manual');
+          if (event.state === 'Pressed' && !capturingKeybind) runShortcutAction(action);
         }).catch(() => {});
       }
       throw error;
     }
+  }
+
+  async function applyScanKeybind(binding: string, previous: string) {
+    await applyShortcut('manual', binding, previous);
+  }
+
+  async function registerSavedShortcut(action: ShortcutAction) {
+    const binding = shortcutBinding(action);
+    if (isMouseBinding(binding)) {
+      await invoke(shortcutMouseCommand(action), { binding });
+      return;
+    }
+    if (await isRegistered(binding)) await unregister(binding);
+    await register(binding, (event) => {
+      if (event.state === 'Pressed' && !capturingKeybind) runShortcutAction(action);
+    });
   }
 
   function keyName(event: KeyboardEvent): string | null {
@@ -327,11 +490,12 @@
   }
 
   async function captureKeybind(event: KeyboardEvent) {
-    if (!capturingKeybind) return;
+    if (!capturingKeybind || !capturingShortcutAction) return;
     event.preventDefault();
     event.stopPropagation();
     if (event.key === 'Escape') {
       capturingKeybind = false;
+      capturingShortcutAction = null;
       return;
     }
     const key = keyName(event);
@@ -341,20 +505,22 @@
       return;
     }
     const next = [...modifiers, key].join('+');
+    const action = capturingShortcutAction;
     try {
-      await applyScanKeybind(next, settings.scanNowKeybind);
-      settings.scanNowKeybind = next;
+      await applyShortcut(action, next, shortcutBinding(action));
+      setShortcutBinding(action, next);
       persistSettings();
       keybindError = null;
-      scannerStatus = `Scan Now keybind set to ${next}`;
+      scannerStatus = `${action === 'manual' ? 'Manual Scan' : 'Auto Scan'} shortcut set to ${next}`;
       capturingKeybind = false;
+      capturingShortcutAction = null;
     } catch (error) {
       keybindError = `Could not register ${next}: ${String(error)}`;
     }
   }
 
   async function captureMouseKeybind(event: MouseEvent) {
-    if (!capturingKeybind) return;
+    if (!capturingKeybind || !capturingShortcutAction) return;
     event.preventDefault();
     event.stopPropagation();
     const binding = event.button === 1 ? 'Middle Mouse' : event.button === 3 ? 'Mouse4' : event.button === 4 ? 'Mouse5' : null;
@@ -362,22 +528,25 @@
       keybindError = event.button <= 2 ? 'Left click and right click cannot be bound.' : 'That mouse button is not supported.';
       return;
     }
+    const action = capturingShortcutAction;
     try {
-      await applyScanKeybind(binding, settings.scanNowKeybind);
-      settings.scanNowKeybind = binding;
+      await applyShortcut(action, binding, shortcutBinding(action));
+      setShortcutBinding(action, binding);
       persistSettings();
       keybindError = null;
-      scannerStatus = `Scan Now keybind set to ${binding}`;
+      scannerStatus = `${action === 'manual' ? 'Manual Scan' : 'Auto Scan'} shortcut set to ${binding}`;
       capturingKeybind = false;
+      capturingShortcutAction = null;
     } catch (error) {
       keybindError = `Could not register ${binding}: ${String(error)}`;
     }
   }
 
-  async function resetKeybind() {
+  async function resetKeybind(action: ShortcutAction = 'manual') {
     try {
-      await applyScanKeybind(DEFAULT_SETTINGS.scanNowKeybind, settings.scanNowKeybind);
-      settings.scanNowKeybind = DEFAULT_SETTINGS.scanNowKeybind;
+      const next = shortcutDefault(action);
+      await applyShortcut(action, next, shortcutBinding(action));
+      setShortcutBinding(action, next);
       persistSettings();
       keybindError = null;
     } catch (error) {
@@ -387,6 +556,13 @@
 
   function keybindLabel(binding: string) {
     return binding.replace(/^Numpad([0-9])$/, 'Numpad $1');
+  }
+
+  function beginShortcutCapture(action: ShortcutAction) {
+    capturingKeybind = true;
+    capturingShortcutAction = action;
+    keybindError = null;
+    openSettingsSection = 'shortcuts';
   }
 
   function keybindWarning(message: string) {
@@ -403,7 +579,8 @@
 
   function historyTitle(entry: HistoryEntry) {
     if (isSystemError(entry)) return 'Scan error';
-    if (entry.status === 'failed') return 'No valid number';
+    if (entry.status === 'failed') return 'Scan failed';
+    if (entry.status === 'invalid') return 'Invalid Number';
     if (entry.status === 'no match') return 'No match';
     if (entry.status === 'skipped') return entry.material === 'No region' ? 'Region not set' : 'Scan skipped';
     return entry.material;
@@ -411,9 +588,10 @@
 
   function historyStatus(entry: HistoryEntry) {
     if (entry.status === 'failed') return 'Issue';
-    if (entry.status === 'no match') return 'No match';
+    if (entry.status === 'invalid') return 'Invalid Number';
+    if (entry.status === 'no match') return 'No Match';
     if (entry.status === 'matched') return 'Match';
-    return entry.status;
+    return 'Skipped';
   }
 
   function triggerLabel(trigger: Trigger) {
@@ -425,10 +603,16 @@
   }
 
   function scannerSummary() {
-    if (!tesseractStatus?.available) return { value: 'Error', detail: 'Scanner unavailable', tone: 'danger' };
-    if (!hasRegion) return { value: 'Needs region', detail: 'Choose a capture region', tone: 'warning' };
-    if (isScanning) return { value: 'Active', detail: 'Reading capture region', tone: 'active' };
-    return { value: 'Ready', detail: activeScanOn ? 'Auto scan is running' : 'Live capture ready', tone: 'good' };
+    if (!tesseractStatus?.available) return { value: 'Scanner Error', detail: 'OCR unavailable', tone: 'danger' };
+    if (activeScanOn) return { value: 'Auto Running', detail: `${settings.activeScanIntervalMs / 1000}s interval`, tone: 'active' };
+    if (!hasRegion) return { value: 'Scanner Paused', detail: 'Set a capture region', tone: 'warning' };
+    if (isScanning) return { value: 'Scanner Ready', detail: 'Reading capture region', tone: 'active' };
+    return { value: 'Scanner Ready', detail: 'Waiting for auto scan', tone: 'good' };
+  }
+
+  function autoSummary() {
+    if (activeScanOn) return { value: 'Auto Running', detail: `${settings.activeScanIntervalMs / 1000}s interval`, tone: 'active' };
+    return { value: 'Auto Off', detail: 'Manual scans available', tone: 'neutral' };
   }
 
   function lastScanSummaryCard() {
@@ -436,12 +620,13 @@
     if (!entry) return { value: 'Not scanned', detail: 'Ready when you are', tone: 'neutral' };
     const value = entry.status === 'matched' ? 'Matched'
       : entry.status === 'no match' ? 'No match'
+      : entry.status === 'invalid' ? 'Invalid Read'
       : entry.status === 'failed' ? 'Failed'
       : 'Skipped';
     return {
       value,
-      detail: `${new Date(entry.timestamp).toLocaleTimeString()} · ${entry.durationMs}ms`,
-      tone: entry.status === 'matched' ? 'good' : entry.status === 'failed' ? 'danger' : 'neutral',
+      detail: `${new Date(entry.timestamp).toLocaleTimeString()} | ${entry.durationMs}ms`,
+      tone: entry.status === 'matched' ? 'good' : entry.status === 'failed' || entry.status === 'invalid' ? 'danger' : 'neutral',
     };
   }
 
@@ -449,9 +634,40 @@
     return regionInfo?.split(' @ ')[0] ?? null;
   }
 
+  function regionSummary() {
+    const size = regionSize();
+    if (hasRegion && size) {
+      const [width, height] = size.split('x').map((value) => Number.parseInt(value, 10));
+      if (!width || !height) return { value: 'Invalid', detail: size, tone: 'danger', action: 'Fix Region' };
+      return { value: 'Ready', detail: size, tone: 'good', action: 'Change Region' };
+    }
+    if (hasRegion) return { value: 'Invalid', detail: 'Saved region unreadable', tone: 'danger', action: 'Fix Region' };
+    return { value: 'Missing', detail: 'No capture region', tone: 'warning', action: 'Set Region' };
+  }
+
   function setIntervalSeconds(seconds: number) {
     settings.activeScanIntervalMs = seconds * 1000;
     void updateInterval();
+  }
+
+  function currentFinds() {
+    return overlayMatches.filter((match) => match.rockCount > 0);
+  }
+
+  function historyDetail(entry: HistoryEntry) {
+    const bits = [
+      `${triggerLabel(entry.trigger)} scan`,
+      new Date(entry.timestamp).toLocaleTimeString(),
+      `${entry.durationMs}ms`,
+    ];
+    if (entry.rawValue && entry.rawValue !== '-') bits.push(`OCR: ${entry.rawValue}`);
+    if (entry.normalizedAttemptValue) bits.push(`${entry.status === 'matched' ? 'matched' : 'attempted'}: ${entry.normalizedAttemptValue}`);
+    if (entry.rockCount) bits.push(`${entry.rockCount} rocks`);
+    if (entry.nearestCandidateMaterial && entry.status === 'no match') {
+      bits.push(`nearest: ${entry.nearestCandidateMaterial} ${entry.nearestCandidateValue}, delta ${Math.abs(entry.delta ?? 0)}`);
+    }
+    if (entry.confidence !== null) bits.push(`${Math.round(entry.confidence * 100)}%`);
+    return bits.join(' | ');
   }
 
   async function setRegion() {
@@ -487,48 +703,144 @@
     try {
       const update = await check();
       if (!update) {
-        updateStatus = 'Up to date';
+        updateStatus = "You're up to date.";
         return;
       }
 
-      updateStatus = `Installing ${update.version}...`;
+      latestKnownVersion = update.version;
+      latestKnownNotes = update.body ?? null;
+      releaseNotes = mergeUpdaterNotes(update, releaseNotes);
+      const shouldInstall = window.confirm(`SigLock ${displayVersion(update.version)} is available. Install it now?`);
+      if (!shouldInstall) {
+        updateStatus = `Update available: ${displayVersion(update.version)}`;
+        return;
+      }
+
+      updateStatus = `Installing ${displayVersion(update.version)}...`;
       await update.downloadAndInstall();
       await relaunch();
     } catch (error) {
-      updateStatus = 'Update failed';
-      scannerStatus = `Update failed: ${String(error)}`;
+      updateStatus = "Couldn't check updates. Try again later.";
+      console.warn('Update check failed', error);
     } finally {
       updating = false;
     }
+  }
+
+  function releaseItemsFromBody(body?: string | null) {
+    if (!body) return [];
+    return body
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line && !/^<!--/.test(line))
+      .map((line) => line
+        .replace(/^#{1,6}\s+/, '')
+        .replace(/^[-*+]\s+/, '')
+        .replace(/^\d+\.\s+/, '')
+        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1')
+        .trim())
+      .filter(Boolean)
+      .slice(0, 12);
+  }
+
+  function mergeUpdaterNotes(update: Update, existing: ReleaseNoteVersion[]) {
+    const items = releaseItemsFromBody(update.body);
+    if (!items.length) return existing;
+    const next = {
+      version: update.version,
+      date: update.date,
+      items,
+      url: GITHUB_RELEASES_URL,
+    };
+    return [next, ...existing.filter((release) => release.version !== update.version)];
+  }
+
+  function normalizeReleaseVersion(tagName: string, name?: string) {
+    return tagName || name || 'Release';
+  }
+
+  async function fetchGitHubReleaseNotes() {
+    const response = await fetch(`${GITHUB_RELEASES_API}?per_page=6`, {
+      headers: { Accept: 'application/vnd.github+json' },
+    });
+    if (!response.ok) throw new Error(`GitHub releases returned ${response.status}`);
+    const releases = await response.json();
+    if (!Array.isArray(releases)) return [];
+    return releases
+      .map((release: any) => ({
+        version: normalizeReleaseVersion(String(release?.tag_name ?? ''), release?.name ? String(release.name) : undefined),
+        date: release?.published_at ? String(release.published_at) : undefined,
+        items: releaseItemsFromBody(release?.body ? String(release.body) : ''),
+        url: release?.html_url ? String(release.html_url) : GITHUB_RELEASES_URL,
+      }))
+      .filter((release) => release.version && release.items.length);
+  }
+
+  async function fetchBundledReleaseNotes() {
+    const response = await fetch('/CHANGELOG.md');
+    if (!response.ok) return [];
+    const body = await response.text();
+    const items = releaseItemsFromBody(body);
+    return items.length ? [{ version: 'Bundled changelog', items }] : [];
+  }
+
+  async function openReleaseNotes() {
+    releaseNotesOpen = true;
+    releaseNotesError = false;
+    if (releaseNotes.length) return;
+    releaseNotesLoading = true;
+    try {
+      const githubNotes = await fetchGitHubReleaseNotes();
+      releaseNotes = latestKnownNotes && latestKnownVersion
+        ? mergeUpdaterNotes({ version: latestKnownVersion, body: latestKnownNotes, date: undefined } as Update, githubNotes)
+        : githubNotes;
+      if (!releaseNotes.length) releaseNotes = await fetchBundledReleaseNotes();
+      releaseNotesError = !releaseNotes.length;
+    } catch (error) {
+      console.warn('Release notes fetch failed', error);
+      try {
+        releaseNotes = await fetchBundledReleaseNotes();
+      } catch (fallbackError) {
+        console.warn('Bundled release notes fetch failed', fallbackError);
+      }
+      releaseNotesError = !releaseNotes.length;
+    } finally {
+      releaseNotesLoading = false;
+    }
+  }
+
+  function openGitHubReleases() {
+    void openUrl(GITHUB_RELEASES_URL);
   }
 
   onMount(async () => {
     document.addEventListener('keydown', captureKeybind, true);
     document.addEventListener('mousedown', captureMouseKeybind, true);
     try {
+      appVersion = await getVersion();
       settings = await loadSettings();
+      if (settings.scanNowKeybind === settings.toggleAutoScanKeybind) {
+        settings.toggleAutoScanKeybind = DEFAULT_SETTINGS.toggleAutoScanKeybind;
+        await saveSettings({ ...settings });
+        keybindError = 'Duplicate shortcut detected; Auto Scan shortcut was reset.';
+      }
     } catch (error) {
       keybindError = `Settings load warning; using safe defaults: ${String(error)}`;
       settings = { ...DEFAULT_SETTINGS };
     }
-    settingsReady = true;
     try {
       await invoke('set_scan_interval', { intervalMs: settings.activeScanIntervalMs });
-      if (isMouseBinding(settings.scanNowKeybind)) {
-        await invoke('set_scan_now_mouse_binding', { binding: settings.scanNowKeybind });
-      } else {
-        if (await isRegistered(settings.scanNowKeybind)) await unregister(settings.scanNowKeybind);
-        await register(settings.scanNowKeybind, (event) => {
-          if (event.state === 'Pressed' && !capturingKeybind) void performScan('Manual');
-        });
-      }
+      await registerSavedShortcut('manual');
+      await registerSavedShortcut('auto');
     } catch (error) {
-      if (settings.scanNowKeybind !== DEFAULT_SETTINGS.scanNowKeybind) {
+      if (settings.scanNowKeybind !== DEFAULT_SETTINGS.scanNowKeybind || settings.toggleAutoScanKeybind !== DEFAULT_SETTINGS.toggleAutoScanKeybind) {
         try {
-          await applyScanKeybind(DEFAULT_SETTINGS.scanNowKeybind, settings.scanNowKeybind);
+          await applyShortcut('manual', DEFAULT_SETTINGS.scanNowKeybind, settings.scanNowKeybind);
+          await applyShortcut('auto', DEFAULT_SETTINGS.toggleAutoScanKeybind, settings.toggleAutoScanKeybind);
           settings.scanNowKeybind = DEFAULT_SETTINGS.scanNowKeybind;
+          settings.toggleAutoScanKeybind = DEFAULT_SETTINGS.toggleAutoScanKeybind;
           await saveSettings({ ...settings });
-          keybindError = `Saved keybind was unavailable; using ${DEFAULT_SETTINGS.scanNowKeybind}.`;
+          keybindError = 'Saved shortcut was unavailable; using defaults.';
         } catch (fallbackError) {
           keybindError = `Keybind registration warning: ${String(fallbackError)}`;
         }
@@ -575,121 +887,215 @@
       <span data-tauri-drag-region>Mining Signature Overlay</span>
       <i data-tauri-drag-region></i>
     </div>
-    <div class="status-pills">
-      <button onclick={checkForUpdates} disabled={updating}>{updateStatus}</button>
-      <button class:good={overlayVisible} onclick={toggleOverlay}>Overlay {overlayVisible ? 'On' : 'Off'}</button>
-      <span class:good={activeScanOn}>Auto {activeScanOn ? 'On' : 'Off'}</span>
+    <div class="top-actions">
+      <button class:good={overlaySetupMode} onclick={toggleOverlaySetupMode}>{overlaySetupMode ? 'Lock Overlay' : 'Unlock Overlay'}</button>
+      <button class:primary={!activeScanOn} class:active={activeScanOn} onclick={toggleActiveScan}>Auto: {activeScanOn ? 'Stop' : 'Start'}</button>
+      <button class="icon-action" aria-label="Settings" title="Settings" onclick={() => settingsOpen = true}>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z" />
+          <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1A2 2 0 0 1 4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9L4.2 7A2 2 0 0 1 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1A2 2 0 0 1 19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.5 1h.1a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" />
+        </svg>
+      </button>
+      <button class="window-control" aria-label="Minimize" title="Minimize" onclick={minimizeWindow}>_</button>
+      <button class="window-control close" aria-label="Close" title="Close" onclick={closeApp}>X</button>
     </div>
   </header>
 
-  <section class="session-summary" aria-label="Session summary">
-    <div class="summary-card {scannerSummary().tone}"><span class="summary-icon">◎</span><div><small>Scanner</small><strong>{scannerSummary().value}</strong><span>{scannerSummary().detail}</span></div></div>
-    <div class="summary-card {lastScanSummaryCard().tone}"><span class="summary-icon">⌁</span><div><small>Last Scan</small><strong>{lastScanSummaryCard().value}</strong><span>{lastScanSummaryCard().detail}</span></div></div>
-    <div class="summary-card {hasRegion ? 'good' : 'warning'}"><span class="summary-icon">◉</span><div><small>Capture Region</small><strong>{hasRegion ? 'Ready' : 'Not set'}</strong><span>{regionSize() ?? 'Choose a capture region'}</span></div></div>
+  <section class="status-strip" aria-label="Session status">
+    <div class="status-card {regionSummary().tone} region-card">
+      <div><small>Region</small><strong>{regionSummary().value}</strong><span>{regionSummary().detail}</span></div>
+      <button onclick={setRegion}>{regionSummary().action}</button>
+    </div>
+    <div class="status-card {scannerSummary().tone}"><small>Scanner</small><strong>{scannerSummary().value}</strong><span>{scannerSummary().detail}</span></div>
+    <div class="status-card {lastScanSummaryCard().tone}"><small>Last</small><strong>{lastScanSummaryCard().value}</strong><span>{lastScanSummaryCard().detail}</span></div>
   </section>
 
-  <div class="app-grid">
-    <div class="column">
-      <div class="column-label">Controls</div>
-      <section class="card">
-        <div class="section-title"><h2><span class="title-icon blue">⌖</span>Manual Scan</h2></div>
-        <div class="button-row">
-          <button class="primary" onclick={() => void performScan('Manual')} disabled={isScanning && queuedTrigger !== null}>Scan Now</button>
-          <input class="signature-input" aria-label="Test signature" placeholder="Test signature" bind:value={observed} onkeydown={(event) => event.key === 'Enter' && runManualMatch()} />
-          <button onclick={runManualMatch}>Match Value</button>
-        </div>
-        <p class="hint">Run a scan or test a known signature.</p>
-      </section>
-
-      <section class="card">
-        <div class="section-title"><h2><span class="title-icon green">⟳</span>Auto Scan</h2><button class:primary={!activeScanOn} class:active={activeScanOn} onclick={toggleActiveScan}>{activeScanOn ? 'Stop' : 'Start'}</button></div>
-        <p class="hint card-intro">Runs one scan at a time.</p>
-        <div class="interval-control"><span>Interval</span><div class="segment-group">{#each [1, 2, 3, 4] as seconds}<button class:active={settings.activeScanIntervalMs === seconds * 1000} onclick={() => setIntervalSeconds(seconds)}>{seconds}s</button>{/each}</div></div>
-      </section>
-
-      <section class="card">
-        <div class="section-title keybind-title"><h2><span class="title-icon purple">⌨</span>Scan Shortcut</h2><kbd>{capturingKeybind ? 'Press a key or mouse button...' : keybindLabel(settings.scanNowKeybind)}</kbd></div>
-        <div class="button-row">
-          <button class="primary" onclick={() => { capturingKeybind = true; keybindError = null; }}>Set Shortcut</button>
-          <button onclick={resetKeybind}>Reset</button>
-        </div>
-        <p class="hint">{keybindError ? keybindWarning(keybindError) : 'Press the shortcut to trigger a manual scan.'}</p>
-      </section>
-
-      <section class="card">
-        <div class="section-title"><h2><span class="title-icon amber">⌾</span>Capture Region</h2>{#if hasRegion}<span class="region-summary">{regionSize()}</span>{/if}</div>
-        <div class="button-row">
-          <button class="primary" onclick={setRegion}>Set Region</button>
-          <button onclick={clearRegion} disabled={!hasRegion}>Clear</button>
-          {#if dev}<button onclick={captureTest} disabled={!hasRegion}>Test</button>{/if}
-        </div>
-        <div class="region-state">
-          {#if dev && capturePreviewUrl}<img class="capture-preview" src={capturePreviewUrl} alt="Capture preview" />{/if}
-          <div><strong>{hasRegion ? 'Region ready' : 'No region selected'}</strong><span>{hasRegion ? `${regionSize()} pixels` : 'Choose the signature area to scan.'}</span></div>
-        </div>
-      </section>
-
-      {#if dev}<details class="card">
-        <summary><span><span class="title-icon muted">&lt;/&gt;</span>Advanced Debug</span><i>Raw logs, OCR output, and internal details.</i></summary>
-        <div class="debug-grid">
-          <label>Tolerance <input type="number" min="0" max="200" bind:value={tolerance} /></label>
-          <pre>{JSON.stringify({ tesseractStatus, debugResult, ocrError, overlayError, keybindError, scannerStatus, regionInfo, lastScanSummary, lastScanTime }, null, 2)}</pre>
-        </div>
-      </details>{/if}
+  <section class="panel finds-panel">
+    <div class="section-title">
+      <h2>Current Finds</h2>
+      <span class="count-pill">{currentFinds().length}</span>
     </div>
-
-    <div class="column">
-      <div class="column-label">Results + Overlay</div>
-      <section class="card">
-        <div class="section-title overlay-title"><h2><span class="title-icon purple">◉</span>Overlay Style</h2><span class="button-row"><button class:active={overlaySetupMode} onclick={toggleOverlaySetupMode}>{overlaySetupMode ? 'Lock Overlay' : 'Unlock'}</button><button onclick={resetOverlayPosition}>Reset Position</button></span></div>
-        <div class="appearance-grid">
-          <label>Text color <input type="color" bind:value={settings.overlayTextColor} onchange={persistSettings} /></label>
-          <label>Background color <input type="color" bind:value={settings.overlayBackgroundColor} onchange={persistSettings} /></label>
-          <label>Accent color <input type="color" bind:value={settings.overlayAccentColor} onchange={persistSettings} /></label>
-          <label>Opacity <strong>{Math.round(settings.overlayOpacity * 100)}%</strong><input type="range" min="0.35" max="1" step="0.05" bind:value={settings.overlayOpacity} onchange={persistSettings} /></label>
-          <label>Text size <strong>{settings.overlayFontSize}px</strong><input type="range" min="11" max="20" step="1" bind:value={settings.overlayFontSize} onchange={persistSettings} /></label>
-          <label>Result lifetime <strong>{settings.overlayResultLifetimeSeconds}s</strong><input type="range" min="5" max="120" step="5" bind:value={settings.overlayResultLifetimeSeconds} onchange={persistSettings} /></label>
-          <label class="toggle"><input type="checkbox" bind:checked={settings.overlayHighContrast} onchange={persistSettings} /><span></span> High contrast</label>
-          <label class="toggle"><input type="checkbox" bind:checked={settings.overlayCompactMode} onchange={persistSettings} /><span></span> Compact mode</label>
-        </div>
-      </section>
-
-      <section class="card results">
-        <div class="section-title"><h2><span class="title-icon green">◇</span>Current Finds</h2><span class="count-pill">{overlayMatches.length}</span></div>
-        {#if overlayMatches.length}
-          <div class="find-grid">{#each overlayMatches.slice(0, 3) as match}
-            <div class="find-card"><strong>{match.material}</strong><span>{match.rockCount} rocks</span>{#if match.repeatCount > 1}<b>×{match.repeatCount}</b>{/if}</div>
-          {/each}</div>
-        {:else}<p class="empty">No finds yet. Matching signatures will appear here.</p>{/if}
-      </section>
-
-      <section class="card history-card">
-        <div class="section-title history-title">
-          <h2><span class="title-icon blue">⌁</span>Scan Feed</h2>
-          <div class="history-actions">
-            <div class="filter-group" aria-label="Filter scan results">
-              <button class:active={historyFilter === 'all'} onclick={() => historyFilter = 'all'}>All</button>
-              <button class:active={historyFilter === 'matches'} onclick={() => historyFilter = 'matches'}>Matches</button>
-              <button class:active={historyFilter === 'issues'} onclick={() => historyFilter = 'issues'}>Issues</button>
-            </div>
-            <button onclick={() => history = []} disabled={!history.length}>Clear</button>
+    {#if currentFinds().length}
+      <div class="find-grid">
+        {#each currentFinds().slice(0, 3) as match}
+          <div class="find-card">
+            <strong>{match.material}</strong>
+            <span>{match.rockCount} rocks{match.valueLabel ? ` | ${match.valueLabel}` : ''}</span>
+            <small>Latest</small>
+            {#if match.repeatCount > 1}<b>x{match.repeatCount}</b>{/if}
           </div>
+        {/each}
+      </div>
+    {:else}
+      <div class="find-empty">
+        <strong>No current finds</strong>
+        <span>Run a scan to pin matched materials here.</span>
+      </div>
+    {/if}
+  </section>
+
+  <section class="panel history-card">
+    <div class="section-title history-title">
+      <h2>Scan Feed</h2>
+      <div class="history-actions">
+        <div class="filter-group" aria-label="Filter scan results">
+          <button class:active={historyFilter === 'all'} onclick={() => historyFilter = 'all'}>All</button>
+          <button class:active={historyFilter === 'matches'} onclick={() => historyFilter = 'matches'}>Matches</button>
+          <button class:active={historyFilter === 'issues'} onclick={() => historyFilter = 'issues'}>Issues</button>
         </div>
-        <div class="history-list">
-          {#if visibleHistory().length}
-            {#each visibleHistory() as entry (entry.id)}
-              <div class:matched-row={entry.status === 'matched'} class="history-row">
-                <span class:system-error={isSystemError(entry)} class="status {entry.status}">{historyStatus(entry)}</span>
-                <div class="history-primary"><strong>{historyTitle(entry)}</strong><span>{triggerLabel(entry.trigger)} · {new Date(entry.timestamp).toLocaleTimeString()} · {entry.durationMs}ms{entry.confidence !== null ? ` · ${Math.round(entry.confidence * 100)}%` : ''}</span></div>
-                <div class="history-value">
-                  {#if entry.status === 'matched'}<strong>{entry.rawValue}</strong>{/if}
-                </div>
-                {#if entry.repeatCount > 1}<b class="repeat">×{entry.repeatCount}</b>{/if}
-              </div>
-            {/each}
-          {:else}<p class="empty">{history.length ? 'No results in this view.' : 'Scans will appear here, newest first.'}</p>{/if}
-        </div>
-      </section>
+        <button onclick={() => history = []} disabled={!history.length}>Clear</button>
+      </div>
     </div>
-  </div>
+    <div class="history-list">
+      {#if visibleHistory().length}
+        {#each visibleHistory() as entry (entry.id)}
+          <div class:matched-row={entry.status === 'matched'} class="history-row">
+            <span class:system-error={isSystemError(entry)} class="status {entry.status}">{historyStatus(entry)}</span>
+            <div class="history-primary">
+              <strong>{historyTitle(entry)}</strong>
+              <span>{historyDetail(entry)}</span>
+            </div>
+            {#if entry.repeatCount > 1}<b class="repeat">x{entry.repeatCount}</b>{/if}
+          </div>
+        {/each}
+      {:else}
+        <div class="feed-empty">
+          <strong>{history.length ? 'No results in this view' : 'Scan feed ready'}</strong>
+          <span>{history.length ? 'Try a different filter.' : 'Manual, auto, invalid, skipped, and match rows will appear here.'}</span>
+        </div>
+      {/if}
+    </div>
+  </section>
+
+  {#if settingsOpen}
+    <div class="settings-backdrop" role="presentation" onclick={() => settingsOpen = false}></div>
+    <aside class="settings-panel" aria-label="Settings">
+      <div class="settings-header">
+        <h2>Settings</h2>
+        <button class="window-control" aria-label="Close settings" onclick={() => settingsOpen = false}>X</button>
+      </div>
+
+      <section class="settings-section">
+        <button class="accordion-header" class:open={openSettingsSection === 'shortcuts'} onclick={() => openSettingsSection = 'shortcuts'}>Shortcuts</button>
+        {#if openSettingsSection === 'shortcuts'}
+          <div class="accordion-body">
+            <div class="shortcut-row">
+              <strong>Manual Scan</strong>
+              <kbd>{capturingShortcutAction === 'manual' ? 'Press a key or mouse button...' : keybindLabel(settings.scanNowKeybind)}</kbd>
+              <button onclick={() => beginShortcutCapture('manual')}>Set Shortcut</button>
+              <button onclick={() => resetKeybind('manual')}>Reset</button>
+            </div>
+            <div class="shortcut-row">
+              <strong>Toggle Auto Scan</strong>
+              <kbd>{capturingShortcutAction === 'auto' ? 'Press a key or mouse button...' : keybindLabel(settings.toggleAutoScanKeybind)}</kbd>
+              <button onclick={() => beginShortcutCapture('auto')}>Set Shortcut</button>
+              <button onclick={() => resetKeybind('auto')}>Reset</button>
+            </div>
+            <p class="hint">{keybindError ? keybindWarning(keybindError) : 'Manual Scan triggers one read. Toggle Auto Scan starts or stops the scan loop.'}</p>
+          </div>
+        {/if}
+      </section>
+
+      <section class="settings-section">
+        <button class="accordion-header" class:open={openSettingsSection === 'scan'} onclick={() => openSettingsSection = 'scan'}>Scan</button>
+        {#if openSettingsSection === 'scan'}
+          <div class="accordion-body">
+            <div class="button-row">
+              <input class="signature-input" aria-label="Test signature" placeholder="Test signature" bind:value={observed} onkeydown={(event) => event.key === 'Enter' && runManualMatch()} />
+              <button onclick={runManualMatch}>Match Value</button>
+            </div>
+            <div class="interval-control"><span>Interval</span><div class="segment-group">{#each [1, 2, 3, 4] as seconds}<button class:active={settings.activeScanIntervalMs === seconds * 1000} onclick={() => setIntervalSeconds(seconds)}>{seconds}s</button>{/each}</div></div>
+            <div class="button-row">
+              <button onclick={clearRegion} disabled={!hasRegion}>Clear Region</button>
+              {#if dev}<button onclick={captureTest} disabled={!hasRegion}>Test Capture</button>{/if}
+            </div>
+            {#if dev && capturePreviewUrl}<img class="capture-preview" src={capturePreviewUrl} alt="Capture preview" />{/if}
+          </div>
+        {/if}
+      </section>
+
+      <section class="settings-section">
+        <button class="accordion-header" class:open={openSettingsSection === 'overlay'} onclick={() => openSettingsSection = 'overlay'}>Overlay</button>
+        {#if openSettingsSection === 'overlay'}
+          <div class="accordion-body">
+            <div class="button-row">
+              <button class:active={overlaySetupMode} onclick={toggleOverlaySetupMode}>{overlaySetupMode ? 'Lock Overlay' : 'Unlock Overlay'}</button>
+              <button onclick={resetOverlayPosition}>Reset Position</button>
+            </div>
+            <div class="appearance-grid">
+              <label>Text color <input type="color" bind:value={settings.overlayTextColor} onchange={persistSettings} /></label>
+              <label>Background <input type="color" bind:value={settings.overlayBackgroundColor} onchange={persistSettings} /></label>
+              <label>Accent <input type="color" bind:value={settings.overlayAccentColor} onchange={persistSettings} /></label>
+              <label>Opacity <strong>{Math.round(settings.overlayOpacity * 100)}%</strong><input type="range" min="0.35" max="1" step="0.05" bind:value={settings.overlayOpacity} onchange={persistSettings} /></label>
+              <label>Text size <strong>{settings.overlayFontSize}px</strong><input type="range" min="11" max="20" step="1" bind:value={settings.overlayFontSize} onchange={persistSettings} /></label>
+              <label>Result lifetime <strong>{settings.overlayResultLifetimeSeconds}s</strong><input type="range" min="5" max="120" step="5" bind:value={settings.overlayResultLifetimeSeconds} onchange={persistSettings} /></label>
+              <label class="toggle"><input type="checkbox" bind:checked={settings.overlayHighContrast} onchange={persistSettings} /><span></span> High contrast</label>
+              <label class="toggle"><input type="checkbox" bind:checked={settings.overlayCompactMode} onchange={persistSettings} /><span></span> Compact mode</label>
+              <label class="toggle"><input type="checkbox" bind:checked={settings.showScannedValueOnOverlay} onchange={persistSettings} /><span></span> Show scanned value on overlay</label>
+            </div>
+          </div>
+        {/if}
+      </section>
+
+      {#if dev}
+        <section class="settings-section">
+          <button class="accordion-header" class:open={openSettingsSection === 'advanced'} onclick={() => openSettingsSection = 'advanced'}>Advanced Debug</button>
+          {#if openSettingsSection === 'advanced'}
+          <div class="accordion-body">
+          <label class="field">Tolerance <input type="number" min="0" max="200" bind:value={tolerance} /></label>
+          <pre>{JSON.stringify({ tesseractStatus, debugResult, ocrError, overlayError, keybindError, scannerStatus, regionInfo, lastScanSummary, lastScanTime }, null, 2)}</pre>
+          </div>
+          {/if}
+        </section>
+      {/if}
+
+      <footer class="settings-footer">
+        <span>Current version: {displayVersion(appVersion)}</span>
+        <button onclick={checkForUpdates} disabled={updating}>{updating ? 'Checking...' : 'Check for Updates'}</button>
+        {#if updateStatus}<p class="update-message">{updateStatus}</p>{/if}
+        <button class="link-button" onclick={openReleaseNotes}>Release Notes</button>
+      </footer>
+    </aside>
+  {/if}
+
+  {#if releaseNotesOpen}
+    <div class="modal-backdrop" role="presentation" onclick={() => releaseNotesOpen = false}></div>
+    <div class="release-modal" role="dialog" aria-modal="true" aria-labelledby="release-notes-title">
+      <div class="settings-header">
+        <div>
+          <h2 id="release-notes-title">Release Notes</h2>
+          <p>Current version: {displayVersion(appVersion)}{#if latestKnownVersion} | Latest: {displayVersion(latestKnownVersion)}{/if}</p>
+        </div>
+        <button class="window-control" aria-label="Close release notes" onclick={() => releaseNotesOpen = false}>X</button>
+      </div>
+
+      {#if releaseNotesLoading}
+        <div class="release-empty">Loading release notes...</div>
+      {:else if releaseNotesError}
+        <div class="release-empty">
+          <strong>Release notes are unavailable right now.</strong>
+          <button onclick={openGitHubReleases}>GitHub Releases</button>
+        </div>
+      {:else}
+        <div class="release-list">
+          {#each releaseNotes as release}
+            <article>
+              <header>
+                <h3>{displayVersion(release.version)}</h3>
+                {#if release.date}<time datetime={release.date}>{new Date(release.date).toLocaleDateString()}</time>{/if}
+              </header>
+              <ul>
+                {#each release.items as item}
+                  <li>{item}</li>
+                {/each}
+              </ul>
+            </article>
+          {/each}
+        </div>
+        <div class="release-actions">
+          <button onclick={openGitHubReleases}>GitHub Releases</button>
+        </div>
+      {/if}
+    </div>
+  {/if}
 </main>

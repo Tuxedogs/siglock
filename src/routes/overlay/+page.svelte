@@ -8,6 +8,8 @@
     key: string;
     material: string;
     rockCount: number;
+    valueLabel?: string;
+    detailLabel?: string;
     repeatCount: number;
     updatedAt: string;
   };
@@ -71,7 +73,12 @@
   {#if visibleMatches.length}
     <div class="matches">
       {#each visibleMatches as match (match.key)}
-        <div><strong>x{match.rockCount}</strong><span>{match.material}</span>{#if match.repeatCount > 1}<b>×{match.repeatCount}</b>{/if}</div>
+        <div class="match-item">
+          <p>{#if match.rockCount > 0}<strong>x{match.rockCount}</strong>{/if}<span>{match.material}</span>{#if match.repeatCount > 1}<b>x{match.repeatCount}</b>{/if}</p>
+          {#if settings?.showScannedValueOnOverlay && (match.valueLabel || match.detailLabel)}
+            <small>{match.valueLabel || match.detailLabel}</small>
+          {/if}
+        </div>
       {/each}
     </div>
   {:else if setupMode}
@@ -128,17 +135,27 @@
     font: inherit;
     text-transform: uppercase;
   }
-  .matches div {
+  .match-item {
+    min-width: 0;
+    padding: 1px 0;
+  }
+  .match-item p {
     display: flex;
     align-items: baseline;
     gap: 5px;
     min-width: 0;
-    padding: 1px 0;
+    margin: 0;
     white-space: nowrap;
+  }
+  .match-item small {
+    display: block;
+    margin-top: -1px;
+    color: color-mix(in srgb, var(--result-text, #e5e7eb) 72%, transparent);
+    font: 700 .78em ui-monospace, monospace;
   }
   .matches strong { color: var(--result-accent, #3b82f6); font-family: ui-monospace, monospace; }
   .matches b { margin-left: 2px; color: color-mix(in srgb, var(--result-text, #e5e7eb) 70%, transparent); font: 700 .78em ui-monospace, monospace; }
-  p { margin: 5px 0 0; color: color-mix(in srgb, var(--result-text, #e5e7eb) 65%, transparent); font-size: .8em; }
+  .overlay-shell > p { margin: 5px 0 0; color: color-mix(in srgb, var(--result-text, #e5e7eb) 65%, transparent); font-size: .8em; }
   :global(:root[data-compact="true"]) .overlay-shell { padding: 3px 5px; }
-  :global(:root[data-compact="true"]) .matches div { padding: 0; }
+  :global(:root[data-compact="true"]) .match-item { padding: 0; }
 </style>
