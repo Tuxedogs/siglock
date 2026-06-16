@@ -5,9 +5,12 @@ on:
   push:
     tags:
       - "v*"
+  release:
+    types: [published]
 
 jobs:
   release:
+    if: github.event_name != 'release'
     runs-on: windows-latest
     permissions:
       contents: write
@@ -32,14 +35,56 @@ jobs:
       - name: Validate frontend
         run: npm run check
 
-      - uses: tauri-apps/tauri-action@v1
+      - name: Prepare release metadata
+        id: release_meta
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $titleVersion = $version -replace '-beta\.', ' Beta '
+          "title=SigLock v$titleVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - id: tauri
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: v__VERSION__
-          releaseName: SigLock v__VERSION__
+          releaseName: ${{ steps.release_meta.outputs.title }}
           releaseBody: Closed beta build. Download the setup executable below. Existing beta installations can update from inside the app.
-          releaseDraft: true
-          prerelease: true
+          releaseDraft: false
+          prerelease: false
+          uploadUpdaterJson: true
+          uploadUpdaterSignatures: true
           updaterJsonPreferNsis: true
+
+      - name: Validate published updater manifest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EXPECTED_VERSION: ${{ steps.tauri.outputs.appVersion }}
+          RELEASE_TAG: v${{ steps.tauri.outputs.appVersion }}
+        run: npm run validate:updater
+
+  validate-updater:
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate published updater manifest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: npm run validate:updater -- --version=${RELEASE_TAG#v}
