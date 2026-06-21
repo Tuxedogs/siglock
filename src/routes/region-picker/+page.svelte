@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
+  import { emitTo } from '@tauri-apps/api/event';
   import { getCurrentWindow } from '@tauri-apps/api/window';
 
   let startX = 0;
@@ -70,6 +71,7 @@
 
     try {
       await invoke('set_crop_region', { region });
+      await emitTo('main', 'crop-region-updated', region);
       status = 'Region saved!';
       // Close immediately after successful save
       await getCurrentWindow().close();
@@ -82,9 +84,13 @@
     }
   }
 
-  function cancel() {
-    // Close immediately on cancel (Escape or other)
-    getCurrentWindow().close();
+  async function cancel() {
+    console.info('[SigLock] region picker cancelled, preserving existing region');
+    try {
+      await emitTo('main', 'region-picker-cancelled');
+    } finally {
+      await getCurrentWindow().close();
+    }
   }
 
   function handleKey(e: KeyboardEvent) {

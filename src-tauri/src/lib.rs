@@ -1,7 +1,7 @@
 use base64::engine::general_purpose;
 use base64::Engine;
 use serde::{Deserialize, Serialize};
-use std::io::Write;
+use std::io::{Cursor, Write};
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
@@ -91,8 +91,7 @@ pub struct OcrConfig {
 //     1. Bundled app-local path (resources/tesseract/)
 //     2. User-configured custom path (from store)
 //     3. System PATH fallback
-// - All dev/debug artifacts go through isolated subdirectories.
-// - Only "latest" debug files are kept (no endless accumulation).
+// - OCR working files use the system temporary directory and are removed after use.
 
 /// Returns the base app data directory using Tauri's proper resolver.
 /// This is the correct way for both development and packaged apps.
@@ -100,13 +99,6 @@ fn get_app_data_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     app.path()
         .app_data_dir()
         .map_err(|e| format!("Failed to resolve app data directory: {}", e))
-}
-
-/// Returns the directory used for debug captures and OCR working files.
-/// This is isolated and will be easy to clean or change in packaged builds.
-fn get_debug_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    let base = get_app_data_dir(app)?;
-    Ok(base.join("siglock").join("debug"))
 }
 
 fn get_native_settings_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -242,7 +234,7 @@ pub struct CaptureResult {
 /// Hard-coded signature index (26 materials)
 static MATERIALS: &[Material] = &[
     Material {
-        name: "Quantainium",
+        name: "Quantanium",
         base: 3170,
         category: Some("High value"),
     },
@@ -1015,8 +1007,7 @@ fn run_tesseract_ocr(
     config: &OcrConfig,
     app: &tauri::AppHandle,
 ) -> Result<String, String> {
-    let debug_dir = get_debug_dir(app)?;
-    let ocr_dir = debug_dir.join("ocr");
+    let ocr_dir = std::env::temp_dir().join("siglock").join("ocr");
     std::fs::create_dir_all(&ocr_dir).map_err(|e| e.to_string())?;
 
     let input_path = ocr_dir.join("ocr_input.png");
@@ -1040,7 +1031,9 @@ fn run_tesseract_ocr(
         cmd.arg("-c").arg("tessedit_char_whitelist=0123456789");
     }
 
-    let output = cmd.output().map_err(|e| {
+    let output_result = cmd.output();
+    let _ = std::fs::remove_file(&input_path);
+    let output = output_result.map_err(|e| {
         format!(
             "Failed to execute tesseract (is it installed and in PATH?): {}",
             e
@@ -1086,28 +1079,19 @@ fn perform_real_ocr_scan(
         }
     }
 
-    // Capture and save raw crop (for debug + Capture Test button)
+    // Capture directly into memory. Persist only the temporary preprocessed image
+    // required by the external Tesseract process.
     let captured_image = best_screen
         .capture_area(region.x, region.y, region.width, region.height)
         .map_err(|e| format!("Screen capture failed: {}", e))?;
-
-    let debug_dir = get_debug_dir(app)?;
-    let captures_dir = debug_dir.join("captures");
-    std::fs::create_dir_all(&captures_dir).ok();
-
-    let raw_path = captures_dir.join("last_capture.png");
-    captured_image.save(&raw_path).map_err(|e| e.to_string())?;
-
-    // Load for preprocessing
-    let dynamic = image::open(&raw_path)
-        .map_err(|e| format!("Failed to load captured crop for OCR: {}", e))?;
+    let capture_width = captured_image.width();
+    let capture_height = captured_image.height();
+    let rgba = image::RgbaImage::from_raw(capture_width, capture_height, captured_image.into_raw())
+        .ok_or_else(|| "Failed to prepare captured crop for OCR.".to_string())?;
+    let dynamic = image::DynamicImage::ImageRgba8(rgba);
 
     // Preprocess using config
     let preprocessed = preprocess_for_ocr(dynamic, &config);
-
-    // Save preprocessed debug image (latest only)
-    let preprocessed_path = captures_dir.join("last_preprocessed.png");
-    preprocessed.save(&preprocessed_path).ok(); // best effort
 
     // Run OCR with config
     let raw_text_result = run_tesseract_ocr(&preprocessed, &config, app);
@@ -1126,10 +1110,10 @@ fn perform_real_ocr_scan(
                     confidence: None,
                     scanned_at,
                     error: Some("Tesseract not found. Please install Tesseract and ensure it is in your PATH (or in the common Program Files location).".to_string()),
-                    raw_crop_path: Some(raw_path.to_string_lossy().to_string()),
-                    preprocessed_path: Some(preprocessed_path.to_string_lossy().to_string()),
-                    capture_width: Some(region.width),
-                    capture_height: Some(region.height),
+                    raw_crop_path: None,
+                    preprocessed_path: None,
+                    capture_width: Some(capture_width),
+                    capture_height: Some(capture_height),
                 });
             }
             return Err(e);
@@ -1156,10 +1140,10 @@ fn perform_real_ocr_scan(
         confidence: None,
         scanned_at,
         error,
-        raw_crop_path: Some(raw_path.to_string_lossy().to_string()),
-        preprocessed_path: Some(preprocessed_path.to_string_lossy().to_string()),
-        capture_width: Some(region.width),
-        capture_height: Some(region.height),
+        raw_crop_path: None,
+        preprocessed_path: None,
+        capture_width: Some(capture_width),
+        capture_height: Some(capture_height),
     })
 }
 
@@ -1191,10 +1175,7 @@ fn calculate_overlap(
 // ==================== Real Region Capture (using screenshots crate) ====================
 
 #[tauri::command]
-async fn capture_region_preview(
-    state: State<'_, AppState>,
-    app: tauri::AppHandle,
-) -> Result<CaptureResult, String> {
+async fn capture_region_preview(state: State<'_, AppState>) -> Result<CaptureResult, String> {
     let region = {
         let s = state.lock().unwrap();
         s.region
@@ -1253,33 +1234,28 @@ async fn capture_region_preview(
     let capture_result = best_screen.capture_area(region.x, region.y, region.width, region.height);
 
     match capture_result {
-        Ok(image) => {
-            // Save using the centralized debug directory (release-friendly)
-            let captures_dir = get_debug_dir(&app)?.join("captures");
-            std::fs::create_dir_all(&captures_dir).map_err(|e| e.to_string())?;
+        Ok(captured_image) => {
+            // Encode the preview in memory; previews never create debug capture files.
+            let width = captured_image.width();
+            let height = captured_image.height();
+            let rgba = image::RgbaImage::from_raw(width, height, captured_image.into_raw())
+                .ok_or_else(|| "Failed to prepare capture preview.".to_string())?;
+            let dynamic = image::DynamicImage::ImageRgba8(rgba);
+            let mut encoded = Cursor::new(Vec::new());
+            dynamic
+                .write_to(&mut encoded, image::ImageFormat::Png)
+                .map_err(|e| format!("Failed to encode capture preview: {}", e))?;
 
-            let file_path = captures_dir.join("last_capture.png");
-            image
-                .save(&file_path)
-                .map_err(|e| format!("Failed to save capture: {}", e))?;
-
-            println!("[Capture] Saved raw crop to: {}", file_path.display());
-
-            // Generate base64 data URL for reliable preview (preferred for debug)
-            // Read the file we just saved — most reliable across image crate versions
-            let preview_data_url = match std::fs::read(&file_path) {
-                Ok(bytes) => Some(format!(
-                    "data:image/png;base64,{}",
-                    general_purpose::STANDARD.encode(&bytes)
-                )),
-                Err(_) => None,
-            };
+            let preview_data_url = Some(format!(
+                "data:image/png;base64,{}",
+                general_purpose::STANDARD.encode(encoded.into_inner())
+            ));
 
             Ok(CaptureResult {
                 success: true,
-                width: image.width(),
-                height: image.height(),
-                image_path: Some(file_path.to_string_lossy().to_string()),
+                width,
+                height,
+                image_path: None,
                 captured_at: chrono::Utc::now().to_rfc3339(),
                 error: None,
                 preview_data_url,
@@ -1550,7 +1526,12 @@ pub fn run() {
             }
             if window.label() == "region_picker" {
                 if let WindowEvent::Destroyed = event {
-                    log_window_lifecycle(&window.app_handle(), "region_picker", "close", "set_region");
+                    log_window_lifecycle(
+                        &window.app_handle(),
+                        "region_picker",
+                        "close",
+                        "set_region",
+                    );
                 }
             }
         })

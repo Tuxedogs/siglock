@@ -1,5 +1,36 @@
 # Changelog
 
+## v0.1.0-beta.3
+
+### Added
+
+- Added a saved-region capture preview in Settings with explicit refresh support.
+- Added realistic solved-result mock data to the overlay Settings preview.
+- Added persistent controls for Salvage, FPS/ROC mineables, rock Composition, Signature Value, and solved-only overlay captures.
+- Added the always-visible All, Stanton, Pyro, and Nyx system filter for system-aware signature disambiguation.
+- Added generated rock-composition data so secondary materials describe materials inside the matched rock rather than unrelated shared-signature candidates.
+
+### Changed
+
+- Shared signatures remain match candidates but are filtered by the selected system before choosing the primary result.
+- Capture previews now update only when Settings opens, the user refreshes, or a saved region changes.
+- Paused scanning with a valid saved region now reports “Ready when you are.”
+- Region state is hydrated and validated before the UI can report that the region is missing.
+
+### Fixed
+
+- Fixed repeated preview capture calls and continuous `last_capture.png` debug writes during scanning.
+- Fixed titlebar dragging and double-click behavior caused by overlapping native drag mechanisms.
+- Fixed stale region status caused by region hydration running after slower startup initialization.
+- Replaced picker polling with explicit saved and cancelled outcomes; Escape preserves the existing region and prior scanner status.
+- Ensured drag state clears on mouse-up, mouse-leave, blur, visibility loss, and component teardown.
+
+### Update Notes
+
+- Beta 2 installations can update through Settings after the signed updater manifest is published and validated.
+- The GitHub release must remain a published, non-prerelease release because SigLock uses `/releases/latest/download/latest.json`.
+- The installer is not Windows Authenticode signed, so Windows SmartScreen may display an unrecognized publisher warning.
+
 ## v0.1.0-beta.2
 
 ### Added

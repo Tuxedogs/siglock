@@ -109,6 +109,20 @@ main { width: 100%; min-height: 100vh; padding: 9px 11px 11px; overflow-x: hidde
 }
 .window-control.close:hover { color: white; border-color: rgba(234, 123, 123, .6); background: rgba(234, 123, 123, .18); }
 
+.system-filter {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 7px;
+  padding: 4px 6px;
+  background: rgba(8, 13, 20, .55);
+  border: 1px solid rgba(130, 150, 180, .1);
+  border-radius: 7px;
+}
+.system-filter span { margin: 0 4px 0 2px; color: var(--muted); font-size: 9px; font-weight: 800; text-transform: uppercase; }
+.system-filter button { min-height: 24px; padding: 2px 10px; color: var(--muted); background: transparent; border-color: transparent; font-size: 9px; }
+.system-filter button.active { color: white; border-color: rgba(47, 128, 237, .45); background: rgba(47, 128, 237, .22); }
+
 .status-strip { display: grid; grid-template-columns: minmax(245px, 1.15fr) repeat(2, minmax(0, 1fr)); gap: 6px; margin-bottom: 7px; }
 .status-card {
   min-width: 0;
@@ -203,7 +217,7 @@ kbd, .count-pill {
 .filter-group button { min-height: 25px; padding: 3px 10px; border: 0; border-right: 1px solid var(--border); border-radius: 0; color: var(--muted); background: transparent; font-size: 9px; }
 .filter-group button:last-child { border-right: 0; }
 .filter-group button.active { color: white; background: rgba(47, 128, 237, .25); }
-.history-list { max-height: calc(100vh - 245px); overflow-y: auto; overflow-x: hidden; }
+.history-list { max-height: calc(100vh - 282px); overflow-y: auto; overflow-x: hidden; }
 .history-row { display: grid; grid-template-columns: 86px minmax(0, 1fr) auto; gap: 8px; padding: 6px 2px; border-top: 1px solid rgba(130, 150, 180, .1); }
 .history-row.matched-row { background: linear-gradient(90deg, rgba(65, 211, 132, .05), transparent 70%); }
 .history-primary { min-width: 0; }
@@ -278,7 +292,17 @@ kbd, .count-pill {
 .toggle span::after { position: absolute; top: 2px; left: 2px; width: 11px; height: 11px; background: #aeb9c7; border-radius: 50%; content: ""; }
 .toggle input:checked + span { background: var(--blue); }
 .toggle input:checked + span::after { left: 14px; background: white; }
-.capture-preview { display: block; width: 120px; height: 50px; margin-top: 8px; border: 1px solid rgba(65, 211, 132, .45); border-radius: 5px; object-fit: cover; }
+.capture-preview-card { display: grid; gap: 7px; padding: 8px; background: rgba(8, 13, 20, .52); border: 1px solid var(--border); border-radius: 7px; }
+.capture-preview-card > div { display: flex; justify-content: space-between; gap: 8px; }
+.capture-preview-card strong { color: #dce5ef; font-size: 10px; }
+.capture-preview-card span, .capture-preview-card p { margin: 0; color: var(--muted); font-size: 9px; }
+.capture-preview-card .region-missing { padding: 12px; color: var(--amber); border: 1px dashed rgba(229, 184, 77, .25); border-radius: 5px; text-align: center; }
+.capture-preview { display: block; width: 100%; height: 86px; border: 1px solid rgba(65, 211, 132, .45); border-radius: 5px; object-fit: contain; background: #030609; }
+.overlay-preview { margin-top: 9px; padding: 7px 9px; color: var(--preview-text); background: color-mix(in srgb, var(--preview-bg) calc(var(--preview-opacity) * 100%), transparent); border-left: 2px solid var(--preview-accent); border-radius: 3px; font-size: var(--preview-size); }
+.overlay-preview > small { display: block; margin-bottom: 5px; color: color-mix(in srgb, var(--preview-text) 62%, transparent); font-size: 8px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.overlay-preview p { display: flex; gap: 5px; margin: 0; white-space: nowrap; }
+.overlay-preview p strong { color: var(--preview-accent); font-family: ui-monospace, monospace; }
+.overlay-preview b { display: block; margin-top: 2px; color: color-mix(in srgb, var(--preview-text) 70%, transparent); font: 700 .7em ui-monospace, monospace; }
 .field { display: grid; gap: 5px; color: var(--muted); font-size: 10px; }
 pre { max-height: 180px; margin: 8px 0 0; overflow: auto; padding: 8px; background: #060a10; border-radius: 5px; color: var(--muted); font-size: 9px; text-shadow: none; }
 .settings-footer {

@@ -53,10 +53,10 @@ jobs:
           tagName: v__VERSION__
           releaseName: ${{ steps.release_meta.outputs.title }}
           releaseBody: |
-            SigLock v0.1.0 Beta 2 closed beta build.
+            SigLock v0.1.0 Beta 3 open beta build.
 
-            Beta 1 users must manually download and install this build because beta.1 did not include in-app update checking.
-            Starting with beta.2, update checking is available from Settings after the updater manifest is published and validated.
+            This release adds capture and overlay previews, result controls, composition data, and system-aware signature disambiguation.
+            It also fixes region startup state, picker completion, titlebar dragging, and repeated debug capture writes.
 
             Download the Windows setup executable below.
           releaseDraft: false

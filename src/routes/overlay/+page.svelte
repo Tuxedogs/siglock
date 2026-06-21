@@ -3,10 +3,14 @@
   import { invoke } from '@tauri-apps/api/core';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import { loadSettingsReadOnly, type SigLockSettings } from '$lib/settings';
+  import { resolveRockComposition, type CompositionStatus } from '$lib/data/rockCompositions';
 
   type OverlayMatch = {
     key: string;
     material: string;
+    secondaryMaterials?: string[];
+    otherCandidates?: string[];
+    compositionStatus?: CompositionStatus;
     rockCount: number;
     valueLabel?: string;
     detailLabel?: string;
@@ -44,8 +48,33 @@
 
   let visibleMatches = $derived(matches.filter((match) => {
     if (!settings) return true;
+    if (settings.onlyShowSolvedResults && match.rockCount <= 0) return false;
     return now - new Date(match.updatedAt).getTime() < settings.overlayResultLifetimeSeconds * 1000;
   }).slice(0, 3));
+
+  function mockPreviewMatch(): OverlayMatch {
+    const composition = resolveRockComposition('Aslarite', 'All');
+    return {
+      key: 'overlay-preview',
+      material: 'Aslarite',
+      secondaryMaterials: composition.secondaryMaterials,
+      otherCandidates: [],
+      compositionStatus: composition.compositionStatus,
+      rockCount: 1,
+      valueLabel: '3840',
+      detailLabel: 'Solved signature',
+      repeatCount: 1,
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  function materialLabel(match: OverlayMatch): string {
+    return settings?.showSecondaryMaterials && match.secondaryMaterials?.length
+      ? `${match.material} | ${match.secondaryMaterials.join(' | ')}`
+      : match.material;
+  }
+
+  let displayedMatches = $derived(setupMode ? [mockPreviewMatch()] : visibleMatches);
 
   onMount(async () => {
     settings = await loadSettingsReadOnly();
@@ -62,7 +91,7 @@
   });
 </script>
 
-{#if setupMode || visibleMatches.length}
+{#if setupMode || displayedMatches.length}
 <div class="overlay-shell">
   {#if setupMode}
     <div class="setup-handle" data-tauri-drag-region>
@@ -70,11 +99,11 @@
       <button onclick={anchorOverlay}>Anchor</button>
     </div>
   {/if}
-  {#if visibleMatches.length}
+  {#if displayedMatches.length}
     <div class="matches">
-      {#each visibleMatches as match (match.key)}
+      {#each displayedMatches as match (match.key)}
         <div class="match-item">
-          <p>{#if match.rockCount > 0}<strong>x{match.rockCount}</strong>{/if}<span>{match.material}</span>{#if match.repeatCount > 1}<b>x{match.repeatCount}</b>{/if}</p>
+          <p>{#if match.rockCount > 0}<strong>x{match.rockCount}</strong>{/if}<span>{materialLabel(match)}</span>{#if match.repeatCount > 1}<b>x{match.repeatCount}</b>{/if}</p>
           {#if settings?.showScannedValueOnOverlay && (match.valueLabel || match.detailLabel)}
             <small>{match.valueLabel || match.detailLabel}</small>
           {/if}

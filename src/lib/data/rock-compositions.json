@@ -1,0 +1,6010 @@
+{
+  "schemaVersion": 1,
+  "source": "Scintel DCB extraction: api/mining/mineables.json",
+  "variants": [
+    {
+      "id": "agricium-8d6548351d55",
+      "primaryMaterial": "Agricium",
+      "systems": [
+        "Pyro",
+        "Stanton"
+      ],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "0a6060e6-261f-4f87-8fc9-07a6342d579e",
+        "71c571c4-6af9-4327-83a6-e8fb0f11a6d3"
+      ],
+      "compositionRows": [
+        {
+          "material": "Agricium",
+          "materialId": "d61d6c33-e428-4014-9326-0b06034de16a",
+          "densityRange": [
+            9.7,
+            15.7
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Agricium",
+          "materialId": "d61d6c33-e428-4014-9326-0b06034de16a",
+          "densityRange": [
+            24.3,
+            74.3
+          ],
+          "qualityRange": [
+            245,
+            490
+          ],
+          "qualityScale": 0.49
+        },
+        {
+          "material": "Aslarite",
+          "materialId": "9bd0e34c-2b34-42a3-b41d-381088ff6fed",
+          "densityRange": [
+            2,
+            5
+          ],
+          "qualityRange": [
+            395,
+            789
+          ],
+          "qualityScale": 0.789
+        },
+        {
+          "material": "Titanium",
+          "materialId": "7b9055e5-6d62-44dd-a725-a31d838301eb",
+          "densityRange": [
+            2,
+            5
+          ],
+          "qualityRange": [
+            395,
+            789
+          ],
+          "qualityScale": 0.789
+        }
+      ]
+    },
+    {
+      "id": "aluminium-097657db087a",
+      "primaryMaterial": "Aluminium",
+      "systems": [],
+      "mineableKinds": [
+        "mineable"
+      ],
+      "sourceCompositionGuids": [
+        "7dfda2ad-0a76-4861-9681-5ce8e85f8da6"
+      ],
+      "compositionRows": [
+        {
+          "material": "Aluminium",
+          "materialId": "3776294d-5689-41f2-b03d-e8fcd17ede6a",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Beryl",
+          "materialId": "cad02f99-292c-4ee4-93cc-a73868f11ddb",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Borase",
+          "materialId": "07f6158a-6494-4b7c-9dd0-bbaab7362137",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "aluminium-09a7aafb41a9",
+      "primaryMaterial": "Aluminium",
+      "systems": [],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "32ed5b5b-7992-4cb0-8880-e9672418284c",
+        "69749cdd-126a-4776-9546-7963ab3bbcdd",
+        "81da9c51-2dc9-4a00-85eb-5781e5de6425"
+      ],
+      "compositionRows": [
+        {
+          "material": "Aluminium",
+          "materialId": "3776294d-5689-41f2-b03d-e8fcd17ede6a",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Laranite",
+          "materialId": "8375a8d8-1627-4d35-ae91-6f39b373c3ad",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "aluminium-17c1b357e68c",
+      "primaryMaterial": "Aluminium",
+      "systems": [],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "99712b33-385c-4f5b-a541-34ec21efa762",
+        "a434a2a1-b7ec-431c-8c2e-1d51f4d42844"
+      ],
+      "compositionRows": [
+        {
+          "material": "Aluminium",
+          "materialId": "3776294d-5689-41f2-b03d-e8fcd17ede6a",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Beryl",
+          "materialId": "cad02f99-292c-4ee4-93cc-a73868f11ddb",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "aluminium-4ee168368acc",
+      "primaryMaterial": "Aluminium",
+      "systems": [],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "49a2e84d-7954-4850-a8a3-42af1fb8003d",
+        "6845d3ef-5199-42d9-9257-48d3b8f7ee18",
+        "6b0907bb-aa5f-40c2-8409-e0002ff3dab4"
+      ],
+      "compositionRows": [
+        {
+          "material": "Aluminium",
+          "materialId": "3776294d-5689-41f2-b03d-e8fcd17ede6a",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Agricium",
+          "materialId": "d61d6c33-e428-4014-9326-0b06034de16a",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "aluminium-55185c15189e",
+      "primaryMaterial": "Aluminium",
+      "systems": [],
+      "mineableKinds": [
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "6915a161-0f2a-4372-b963-8195ad60dd89"
+      ],
+      "compositionRows": [
+        {
+          "material": "Aluminium",
+          "materialId": "3776294d-5689-41f2-b03d-e8fcd17ede6a",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Beryl",
+          "materialId": "cad02f99-292c-4ee4-93cc-a73868f11ddb",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Laranite",
+          "materialId": "8375a8d8-1627-4d35-ae91-6f39b373c3ad",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "aluminium-9d4d73fcdf97",
+      "primaryMaterial": "Aluminium",
+      "systems": [],
+      "mineableKinds": [
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "13bf70c3-062b-4a03-9148-26d03978db74"
+      ],
+      "compositionRows": [
+        {
+          "material": "Aluminium",
+          "materialId": "3776294d-5689-41f2-b03d-e8fcd17ede6a",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Laranite",
+          "materialId": "8375a8d8-1627-4d35-ae91-6f39b373c3ad",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Borase",
+          "materialId": "07f6158a-6494-4b7c-9dd0-bbaab7362137",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "aluminium-a56b293baa9c",
+      "primaryMaterial": "Aluminium",
+      "systems": [],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "3a6e7bb4-0f23-4c46-b822-333afe9d63ab",
+        "d916cc29-9ca5-4480-b965-d0f5b5f85a18"
+      ],
+      "compositionRows": [
+        {
+          "material": "Aluminium",
+          "materialId": "3776294d-5689-41f2-b03d-e8fcd17ede6a",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "aluminium-dabdce3f6760",
+      "primaryMaterial": "Aluminium",
+      "systems": [],
+      "mineableKinds": [
+        "mineable"
+      ],
+      "sourceCompositionGuids": [
+        "ad4cbf21-de74-47fd-8ba0-54f8c3285225"
+      ],
+      "compositionRows": [
+        {
+          "material": "Aluminium",
+          "materialId": "3776294d-5689-41f2-b03d-e8fcd17ede6a",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Borase",
+          "materialId": "07f6158a-6494-4b7c-9dd0-bbaab7362137",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "aslarite-531d76a483eb",
+      "primaryMaterial": "Aslarite",
+      "systems": [
+        "Pyro",
+        "Stanton"
+      ],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "2b934c4b-f47c-46b4-bad0-be8a24d6b94a",
+        "e2e4a538-7f96-4c9b-8136-fb961dd37cea"
+      ],
+      "compositionRows": [
+        {
+          "material": "Aslarite",
+          "materialId": "9bd0e34c-2b34-42a3-b41d-381088ff6fed",
+          "densityRange": [
+            2.82,
+            6.82
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Aslarite",
+          "materialId": "9bd0e34c-2b34-42a3-b41d-381088ff6fed",
+          "densityRange": [
+            39.18,
+            83.18
+          ],
+          "qualityRange": [
+            245,
+            490
+          ],
+          "qualityScale": 0.49
+        },
+        {
+          "material": "Agricium",
+          "materialId": "d61d6c33-e428-4014-9326-0b06034de16a",
+          "densityRange": [
+            2,
+            5
+          ],
+          "qualityRange": [
+            395,
+            789
+          ],
+          "qualityScale": 0.789
+        },
+        {
+          "material": "Titanium",
+          "materialId": "7b9055e5-6d62-44dd-a725-a31d838301eb",
+          "densityRange": [
+            2,
+            5
+          ],
+          "qualityRange": [
+            395,
+            789
+          ],
+          "qualityScale": 0.789
+        }
+      ]
+    },
+    {
+      "id": "beryl-8017ba08d105",
+      "primaryMaterial": "Beryl",
+      "systems": [
+        "Stanton"
+      ],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "2c7237f3-4061-4379-a050-55f372dbbe00",
+        "918f0b57-632b-4f0c-b8b5-869333ba5613"
+      ],
+      "compositionRows": [
+        {
+          "material": "Beryl",
+          "materialId": "cad02f99-292c-4ee4-93cc-a73868f11ddb",
+          "densityRange": [
+            5.7,
+            11.7
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Beryl",
+          "materialId": "cad02f99-292c-4ee4-93cc-a73868f11ddb",
+          "densityRange": [
+            38.3,
+            88.3
+          ],
+          "qualityRange": [
+            245,
+            490
+          ],
+          "qualityScale": 0.49
+        }
+      ]
+    },
+    {
+      "id": "bexalite-fe5a0bbf3471",
+      "primaryMaterial": "Bexalite",
+      "systems": [
+        "Nyx",
+        "Pyro",
+        "Stanton"
+      ],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "004c1ddd-ee4e-4c77-92bd-50739bb0e23e",
+        "4e79ec1e-84ae-4f7c-a566-6e52aa5959ba"
+      ],
+      "compositionRows": [
+        {
+          "material": "Borase",
+          "materialId": "07f6158a-6494-4b7c-9dd0-bbaab7362137",
+          "densityRange": [
+            2,
+            5
+          ],
+          "qualityRange": [
+            395,
+            789
+          ],
+          "qualityScale": 0.789
+        }
+      ]
+    },
+    {
+      "id": "borase-b5060cba51e7",
+      "primaryMaterial": "Borase",
+      "systems": [
+        "Pyro",
+        "Stanton"
+      ],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "885a28d1-911c-4454-aef6-2ccad8bc6227",
+        "b42b8e22-a4cb-4847-aaa4-f93e11fa97cb"
+      ],
+      "compositionRows": [
+        {
+          "material": "Borase",
+          "materialId": "07f6158a-6494-4b7c-9dd0-bbaab7362137",
+          "densityRange": [
+            9.7,
+            15.7
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Borase",
+          "materialId": "07f6158a-6494-4b7c-9dd0-bbaab7362137",
+          "densityRange": [
+            24.3,
+            74.3
+          ],
+          "qualityRange": [
+            245,
+            490
+          ],
+          "qualityScale": 0.49
+        }
+      ]
+    },
+    {
+      "id": "copper-45e03043ed79",
+      "primaryMaterial": "Copper",
+      "systems": [],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "55475020-d023-4f2b-b074-f78f1b809fae",
+        "aef0a6e8-e4f5-45bb-9edb-f58d18acaf21",
+        "ecc45f93-558d-47ee-851b-f189f2eaa15d"
+      ],
+      "compositionRows": [
+        {
+          "material": "Copper",
+          "materialId": "ee12edc1-a2c3-4202-909d-9b729a050a3f",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Laranite",
+          "materialId": "8375a8d8-1627-4d35-ae91-6f39b373c3ad",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "copper-49e630d606ca",
+      "primaryMaterial": "Copper",
+      "systems": [],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "9d1359c9-9462-4005-82b5-cec897d7290b",
+        "bd7712f1-df33-42d5-a1de-571b04405f23"
+      ],
+      "compositionRows": [
+        {
+          "material": "Copper",
+          "materialId": "ee12edc1-a2c3-4202-909d-9b729a050a3f",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "copper-7e00155be845",
+      "primaryMaterial": "Copper",
+      "systems": [],
+      "mineableKinds": [
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "b0e82569-2255-4b4a-be6c-7c50b45c9416"
+      ],
+      "compositionRows": [
+        {
+          "material": "Copper",
+          "materialId": "ee12edc1-a2c3-4202-909d-9b729a050a3f",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Laranite",
+          "materialId": "8375a8d8-1627-4d35-ae91-6f39b373c3ad",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Borase",
+          "materialId": "07f6158a-6494-4b7c-9dd0-bbaab7362137",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "copper-821d341545e8",
+      "primaryMaterial": "Copper",
+      "systems": [],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "098b9e06-14fb-46a6-a878-455bad2be67f",
+        "48c2a9ce-ae41-4bd6-a13a-faa31ae3927e"
+      ],
+      "compositionRows": [
+        {
+          "material": "Copper",
+          "materialId": "ee12edc1-a2c3-4202-909d-9b729a050a3f",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Beryl",
+          "materialId": "cad02f99-292c-4ee4-93cc-a73868f11ddb",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "copper-83de0fe3252d",
+      "primaryMaterial": "Copper",
+      "systems": [],
+      "mineableKinds": [
+        "mineable"
+      ],
+      "sourceCompositionGuids": [
+        "29f1dd92-a3ae-4c16-aab5-8cf964425aa8"
+      ],
+      "compositionRows": [
+        {
+          "material": "Copper",
+          "materialId": "ee12edc1-a2c3-4202-909d-9b729a050a3f",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Beryl",
+          "materialId": "cad02f99-292c-4ee4-93cc-a73868f11ddb",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Borase",
+          "materialId": "07f6158a-6494-4b7c-9dd0-bbaab7362137",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "copper-8a80c9d324fe",
+      "primaryMaterial": "Copper",
+      "systems": [],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "236ef921-09d8-48c2-9c5c-b660dba36502",
+        "b062ba5e-aa30-4117-ac55-373c8a1feb37",
+        "b2260f98-7265-4768-88f1-d1f3dfd3a277"
+      ],
+      "compositionRows": [
+        {
+          "material": "Copper",
+          "materialId": "ee12edc1-a2c3-4202-909d-9b729a050a3f",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Agricium",
+          "materialId": "d61d6c33-e428-4014-9326-0b06034de16a",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "copper-a783122a7a1c",
+      "primaryMaterial": "Copper",
+      "systems": [],
+      "mineableKinds": [
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "0687cc9d-a2b2-4e4e-bdaa-343cc584144a"
+      ],
+      "compositionRows": [
+        {
+          "material": "Copper",
+          "materialId": "ee12edc1-a2c3-4202-909d-9b729a050a3f",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Beryl",
+          "materialId": "cad02f99-292c-4ee4-93cc-a73868f11ddb",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Laranite",
+          "materialId": "8375a8d8-1627-4d35-ae91-6f39b373c3ad",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "copper-aa828c5885c3",
+      "primaryMaterial": "Copper",
+      "systems": [],
+      "mineableKinds": [
+        "mineable"
+      ],
+      "sourceCompositionGuids": [
+        "af1778ca-52b6-4f9a-adc9-6d06e15a0590"
+      ],
+      "compositionRows": [
+        {
+          "material": "Copper",
+          "materialId": "ee12edc1-a2c3-4202-909d-9b729a050a3f",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Borase",
+          "materialId": "07f6158a-6494-4b7c-9dd0-bbaab7362137",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "copper-c53fae52bc48",
+      "primaryMaterial": "Copper",
+      "systems": [
+        "Pyro",
+        "Stanton"
+      ],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "f5bcbf37-d613-4b51-897f-a11572d5f575",
+        "f9361e5b-fb9f-444f-8ed7-a4e5dd6fee81"
+      ],
+      "compositionRows": [
+        {
+          "material": "Copper",
+          "materialId": "ee12edc1-a2c3-4202-909d-9b729a050a3f",
+          "densityRange": [
+            5.7,
+            11.7
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Copper",
+          "materialId": "ee12edc1-a2c3-4202-909d-9b729a050a3f",
+          "densityRange": [
+            28.3,
+            78.3
+          ],
+          "qualityRange": [
+            245,
+            490
+          ],
+          "qualityScale": 0.49
+        },
+        {
+          "material": "Tin",
+          "materialId": "16b426e2-7ce1-4fb4-8b34-4d8617dd6a97",
+          "densityRange": [
+            5,
+            10
+          ],
+          "qualityRange": [
+            395,
+            789
+          ],
+          "qualityScale": 0.789
+        }
+      ]
+    },
+    {
+      "id": "corundum-06824e933dd7",
+      "primaryMaterial": "Corundum",
+      "systems": [],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "22aecd37-3fd0-494f-a899-057ea522d3b6",
+        "3ea2762b-ff3f-42cf-b392-e6afc96faaff",
+        "b32e53a8-2c50-48b6-92b7-0b3c6624d1ab"
+      ],
+      "compositionRows": [
+        {
+          "material": "Corundum",
+          "materialId": "b471b96c-efbb-4342-90de-cfa087604d8e",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Agricium",
+          "materialId": "d61d6c33-e428-4014-9326-0b06034de16a",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "corundum-078607d137ae",
+      "primaryMaterial": "Corundum",
+      "systems": [],
+      "mineableKinds": [
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "16df88a3-38b9-41df-8c62-e50f1d712f7f"
+      ],
+      "compositionRows": [
+        {
+          "material": "Corundum",
+          "materialId": "b471b96c-efbb-4342-90de-cfa087604d8e",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Laranite",
+          "materialId": "8375a8d8-1627-4d35-ae91-6f39b373c3ad",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Borase",
+          "materialId": "07f6158a-6494-4b7c-9dd0-bbaab7362137",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "corundum-0db3c0cd4bd5",
+      "primaryMaterial": "Corundum",
+      "systems": [],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "0d0cd0d0-d756-4b8e-b23a-f8c105f45bf5",
+        "f18fbcc3-e080-4c3d-b335-883f08520ed4"
+      ],
+      "compositionRows": [
+        {
+          "material": "Corundum",
+          "materialId": "b471b96c-efbb-4342-90de-cfa087604d8e",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "corundum-1cf5efc670c8",
+      "primaryMaterial": "Corundum",
+      "systems": [],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "d5af598e-efbf-4252-8a2a-c2971f5970ed",
+        "e4be8899-7753-4022-9453-d8fe44adc7f2"
+      ],
+      "compositionRows": [
+        {
+          "material": "Corundum",
+          "materialId": "b471b96c-efbb-4342-90de-cfa087604d8e",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Beryl",
+          "materialId": "cad02f99-292c-4ee4-93cc-a73868f11ddb",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "corundum-4399b1c0b8ff",
+      "primaryMaterial": "Corundum",
+      "systems": [
+        "Pyro",
+        "Stanton"
+      ],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "0d5911b5-0eb3-47c4-a56f-89e4b1e82c1a",
+        "f7959de5-2bd2-43ab-aae3-4d057d624852"
+      ],
+      "compositionRows": [
+        {
+          "material": "Corundum",
+          "materialId": "b471b96c-efbb-4342-90de-cfa087604d8e",
+          "densityRange": [
+            5.7,
+            11.7
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Corundum",
+          "materialId": "b471b96c-efbb-4342-90de-cfa087604d8e",
+          "densityRange": [
+            28.3,
+            78.3
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Aluminium",
+          "materialId": "3776294d-5689-41f2-b03d-e8fcd17ede6a",
+          "densityRange": [
+            5,
+            10
+          ],
+          "qualityRange": [
+            395,
+            789
+          ],
+          "qualityScale": 0.789
+        }
+      ]
+    },
+    {
+      "id": "corundum-9e95eb0f66b4",
+      "primaryMaterial": "Corundum",
+      "systems": [],
+      "mineableKinds": [
+        "mineable"
+      ],
+      "sourceCompositionGuids": [
+        "9c2e6dfd-ebe6-4937-9cc3-7bf0b5e86405"
+      ],
+      "compositionRows": [
+        {
+          "material": "Corundum",
+          "materialId": "b471b96c-efbb-4342-90de-cfa087604d8e",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Beryl",
+          "materialId": "cad02f99-292c-4ee4-93cc-a73868f11ddb",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Borase",
+          "materialId": "07f6158a-6494-4b7c-9dd0-bbaab7362137",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "corundum-a1c22c6dd397",
+      "primaryMaterial": "Corundum",
+      "systems": [],
+      "mineableKinds": [
+        "mineable"
+      ],
+      "sourceCompositionGuids": [
+        "7a73f1eb-0f8c-4c30-95dd-75735f623c1a"
+      ],
+      "compositionRows": [
+        {
+          "material": "Corundum",
+          "materialId": "b471b96c-efbb-4342-90de-cfa087604d8e",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Borase",
+          "materialId": "07f6158a-6494-4b7c-9dd0-bbaab7362137",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "corundum-d18d921ee51b",
+      "primaryMaterial": "Corundum",
+      "systems": [],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "00fefa0c-ee88-4884-8a4d-85dd166d10c9",
+        "62b57523-a4dd-48da-aad5-6bd131f7bbd3",
+        "8e9a99df-7140-46ef-86a6-826932279f66"
+      ],
+      "compositionRows": [
+        {
+          "material": "Corundum",
+          "materialId": "b471b96c-efbb-4342-90de-cfa087604d8e",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Laranite",
+          "materialId": "8375a8d8-1627-4d35-ae91-6f39b373c3ad",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "corundum-d6f22d94d507",
+      "primaryMaterial": "Corundum",
+      "systems": [],
+      "mineableKinds": [
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "70a6c5b2-2253-4ff2-b786-744855ae8628"
+      ],
+      "compositionRows": [
+        {
+          "material": "Corundum",
+          "materialId": "b471b96c-efbb-4342-90de-cfa087604d8e",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Beryl",
+          "materialId": "cad02f99-292c-4ee4-93cc-a73868f11ddb",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Laranite",
+          "materialId": "8375a8d8-1627-4d35-ae91-6f39b373c3ad",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "gold-59b3e04137ab",
+      "primaryMaterial": "Gold",
+      "systems": [
+        "Pyro",
+        "Stanton"
+      ],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "387cb792-f770-4eee-a525-e4cacd2cb2d1",
+        "5a862c96-f156-4dba-94fb-a159166100f3"
+      ],
+      "compositionRows": [
+        {
+          "material": "Borase",
+          "materialId": "07f6158a-6494-4b7c-9dd0-bbaab7362137",
+          "densityRange": [
+            2,
+            5
+          ],
+          "qualityRange": [
+            395,
+            789
+          ],
+          "qualityScale": 0.789
+        }
+      ]
+    },
+    {
+      "id": "heph-80b912a54847",
+      "primaryMaterial": "Heph",
+      "systems": [
+        "Pyro",
+        "Stanton"
+      ],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "44035494-974e-47f5-98a2-79a1616b62a6",
+        "becf21b0-3812-4e04-aeb5-031d61104fdd"
+      ],
+      "compositionRows": [
+        {
+          "material": "Quartz",
+          "materialId": "1d35c0bc-9142-42ff-8a83-0ec68d69a128",
+          "densityRange": [
+            2,
+            5
+          ],
+          "qualityRange": [
+            395,
+            789
+          ],
+          "qualityScale": 0.789
+        },
+        {
+          "material": "Silicon",
+          "materialId": "219e8523-b953-4517-812a-0fb2eb023209",
+          "densityRange": [
+            2,
+            5
+          ],
+          "qualityRange": [
+            395,
+            789
+          ],
+          "qualityScale": 0.789
+        }
+      ]
+    },
+    {
+      "id": "ice-939eca6bb80f",
+      "primaryMaterial": "Ice",
+      "systems": [
+        "Nyx",
+        "Pyro",
+        "Stanton"
+      ],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "3fc54018-acc4-4b34-aac1-bb97aa2bbece",
+        "606cffd3-77a5-4d87-8927-049f1de6b686"
+      ],
+      "compositionRows": [
+        {
+          "material": "Pressurized Ice",
+          "materialId": "51745536-ff2b-4840-a6f8-b1ed498a77ff",
+          "densityRange": [
+            9.7,
+            15.7
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Pressurized Ice",
+          "materialId": "51745536-ff2b-4840-a6f8-b1ed498a77ff",
+          "densityRange": [
+            34.3,
+            84.3
+          ],
+          "qualityRange": [
+            245,
+            490
+          ],
+          "qualityScale": 0.49
+        }
+      ]
+    },
+    {
+      "id": "ice-d3e8c28d921b",
+      "primaryMaterial": "Ice",
+      "systems": [],
+      "mineableKinds": [
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "7fd787c2-8955-4995-9946-27098f3680bf"
+      ],
+      "compositionRows": [
+        {
+          "material": "Pressurized Ice",
+          "materialId": "51745536-ff2b-4840-a6f8-b1ed498a77ff",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Agricium",
+          "materialId": "d61d6c33-e428-4014-9326-0b06034de16a",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Borase",
+          "materialId": "07f6158a-6494-4b7c-9dd0-bbaab7362137",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Stileron",
+          "materialId": "9498a080-84c0-41f4-b88f-71942c60c43f",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Riccite",
+          "materialId": "905e9623-5e74-4a92-9cb1-72203ed8baad",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "iron-04506fb75516",
+      "primaryMaterial": "Iron",
+      "systems": [],
+      "mineableKinds": [
+        "mineable"
+      ],
+      "sourceCompositionGuids": [
+        "c242805c-804b-4b3d-9661-d0210c438331"
+      ],
+      "compositionRows": [
+        {
+          "material": "Iron",
+          "materialId": "05708bae-1cb1-4e63-bb95-ec7f4a3ef430",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Borase",
+          "materialId": "07f6158a-6494-4b7c-9dd0-bbaab7362137",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "iron-3b969aa1c682",
+      "primaryMaterial": "Iron",
+      "systems": [
+        "Nyx",
+        "Pyro",
+        "Stanton"
+      ],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "6d8ce739-5180-4479-a43b-e1c2a580d72d",
+        "ece23c39-ebb8-4a72-871b-5413e70619bf"
+      ],
+      "compositionRows": [
+        {
+          "material": "Iron",
+          "materialId": "05708bae-1cb1-4e63-bb95-ec7f4a3ef430",
+          "densityRange": [
+            9.7,
+            15.7
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Iron",
+          "materialId": "05708bae-1cb1-4e63-bb95-ec7f4a3ef430",
+          "densityRange": [
+            34.3,
+            84.3
+          ],
+          "qualityRange": [
+            245,
+            490
+          ],
+          "qualityScale": 0.49
+        }
+      ]
+    },
+    {
+      "id": "iron-7243ad35a618",
+      "primaryMaterial": "Iron",
+      "systems": [],
+      "mineableKinds": [
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "340e205e-fa34-4c3b-bfbe-a688fce05fa5"
+      ],
+      "compositionRows": [
+        {
+          "material": "Iron",
+          "materialId": "05708bae-1cb1-4e63-bb95-ec7f4a3ef430",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Agricium",
+          "materialId": "d61d6c33-e428-4014-9326-0b06034de16a",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "iron-76339ee01daa",
+      "primaryMaterial": "Iron",
+      "systems": [],
+      "mineableKinds": [
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "22f7f954-10d5-4fd8-b27f-083e665ac278"
+      ],
+      "compositionRows": [
+        {
+          "material": "Iron",
+          "materialId": "05708bae-1cb1-4e63-bb95-ec7f4a3ef430",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Laranite",
+          "materialId": "8375a8d8-1627-4d35-ae91-6f39b373c3ad",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "iron-76506febcb1c",
+      "primaryMaterial": "Iron",
+      "systems": [],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "965611d1-7fbd-4dc6-9d7a-9676229293ff",
+        "b3369adb-070b-464f-93ef-92c40d926b9e"
+      ],
+      "compositionRows": [
+        {
+          "material": "Iron",
+          "materialId": "05708bae-1cb1-4e63-bb95-ec7f4a3ef430",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Beryl",
+          "materialId": "cad02f99-292c-4ee4-93cc-a73868f11ddb",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "iron-7b496bb3ac64",
+      "primaryMaterial": "Iron",
+      "systems": [],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "4c8975b2-e98a-4c95-bcec-5b9c2dea5091",
+        "bc04cd63-bb84-4bc8-9a8e-d7c4479ddfda"
+      ],
+      "compositionRows": [
+        {
+          "material": "Iron",
+          "materialId": "05708bae-1cb1-4e63-bb95-ec7f4a3ef430",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "iron-a7cdb21e2222",
+      "primaryMaterial": "Iron",
+      "systems": [],
+      "mineableKinds": [
+        "mineable"
+      ],
+      "sourceCompositionGuids": [
+        "7e5463dc-538f-4fda-adc4-9dc3640e207e",
+        "c0c653cc-89b3-4905-aacd-8ebd4b584922"
+      ],
+      "compositionRows": [
+        {
+          "material": "Iron",
+          "materialId": "05708bae-1cb1-4e63-bb95-ec7f4a3ef430",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Agricium",
+          "materialId": "d61d6c33-e428-4014-9326-0b06034de16a",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Aslarite",
+          "materialId": "9bd0e34c-2b34-42a3-b41d-381088ff6fed",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Ouratite",
+          "materialId": "8723956e-e947-4b84-9dcb-b2c6137895ab",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "iron-befe0e91cfdc",
+      "primaryMaterial": "Iron",
+      "systems": [],
+      "mineableKinds": [
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "06832426-8bf5-42c0-b7ed-b32b24c097f1"
+      ],
+      "compositionRows": [
+        {
+          "material": "Iron",
+          "materialId": "05708bae-1cb1-4e63-bb95-ec7f4a3ef430",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Beryl",
+          "materialId": "cad02f99-292c-4ee4-93cc-a73868f11ddb",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Laranite",
+          "materialId": "8375a8d8-1627-4d35-ae91-6f39b373c3ad",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "iron-c6b74af00ea2",
+      "primaryMaterial": "Iron",
+      "systems": [],
+      "mineableKinds": [
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "deb46765-9070-4122-a272-082bbcab84d4"
+      ],
+      "compositionRows": [
+        {
+          "material": "Iron",
+          "materialId": "05708bae-1cb1-4e63-bb95-ec7f4a3ef430",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Laranite",
+          "materialId": "8375a8d8-1627-4d35-ae91-6f39b373c3ad",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Borase",
+          "materialId": "07f6158a-6494-4b7c-9dd0-bbaab7362137",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "iron-dce6b3fb62e9",
+      "primaryMaterial": "Iron",
+      "systems": [],
+      "mineableKinds": [
+        "mineable"
+      ],
+      "sourceCompositionGuids": [
+        "39e41884-db81-499e-9ee0-3c6f35fd455e",
+        "c0e320f0-b6bc-466f-bc07-3422bac7ce5c"
+      ],
+      "compositionRows": [
+        {
+          "material": "Iron",
+          "materialId": "05708bae-1cb1-4e63-bb95-ec7f4a3ef430",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Laranite",
+          "materialId": "8375a8d8-1627-4d35-ae91-6f39b373c3ad",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Aslarite",
+          "materialId": "9bd0e34c-2b34-42a3-b41d-381088ff6fed",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Ouratite",
+          "materialId": "8723956e-e947-4b84-9dcb-b2c6137895ab",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "iron-e9f75ecf505a",
+      "primaryMaterial": "Iron",
+      "systems": [],
+      "mineableKinds": [
+        "mineable"
+      ],
+      "sourceCompositionGuids": [
+        "fcb57e79-ac88-4173-aea2-c2765823475c"
+      ],
+      "compositionRows": [
+        {
+          "material": "Iron",
+          "materialId": "05708bae-1cb1-4e63-bb95-ec7f4a3ef430",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Beryl",
+          "materialId": "cad02f99-292c-4ee4-93cc-a73868f11ddb",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Borase",
+          "materialId": "07f6158a-6494-4b7c-9dd0-bbaab7362137",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "laranite-438005c8483f",
+      "primaryMaterial": "Laranite",
+      "systems": [
+        "Pyro",
+        "Stanton"
+      ],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "1c258df0-10f5-4550-acc7-9b9b9ecb2d20",
+        "f69ad5eb-97f4-4623-ae8e-f7c12ba09598"
+      ],
+      "compositionRows": [
+        {
+          "material": "Laranite",
+          "materialId": "8375a8d8-1627-4d35-ae91-6f39b373c3ad",
+          "densityRange": [
+            5.7,
+            11.7
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Laranite",
+          "materialId": "8375a8d8-1627-4d35-ae91-6f39b373c3ad",
+          "densityRange": [
+            28.3,
+            78.3
+          ],
+          "qualityRange": [
+            245,
+            490
+          ],
+          "qualityScale": 0.49
+        },
+        {
+          "material": "Tungsten",
+          "materialId": "8f6a7e06-934d-4339-a0a2-75420b81369a",
+          "densityRange": [
+            5,
+            10
+          ],
+          "qualityRange": [
+            395,
+            789
+          ],
+          "qualityScale": 0.789
+        }
+      ]
+    },
+    {
+      "id": "lindinium-9c7cde45811d",
+      "primaryMaterial": "Lindinium",
+      "systems": [
+        "Nyx"
+      ],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "ca4881b0-5183-4ca4-b0c2-8bcb2d5b3e55",
+        "fd7dc10a-19a4-4f82-aae2-52ac35bda567"
+      ],
+      "compositionRows": [
+        {
+          "material": "Lindinium",
+          "materialId": "1ec31863-26a8-446e-9805-448bb50253ed",
+          "densityRange": [
+            9.7,
+            15.7
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Lindinium",
+          "materialId": "1ec31863-26a8-446e-9805-448bb50253ed",
+          "densityRange": [
+            24.3,
+            74.3
+          ],
+          "qualityRange": [
+            245,
+            490
+          ],
+          "qualityScale": 0.49
+        },
+        {
+          "material": "Tungsten",
+          "materialId": "8f6a7e06-934d-4339-a0a2-75420b81369a",
+          "densityRange": [
+            5,
+            10
+          ],
+          "qualityRange": [
+            395,
+            789
+          ],
+          "qualityScale": 0.789
+        }
+      ]
+    },
+    {
+      "id": "ouratite-a48aec1cd0c4",
+      "primaryMaterial": "Ouratite",
+      "systems": [
+        "Stanton"
+      ],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "0880d6d0-bee5-41b1-9aef-cc040a539ecf",
+        "9f6c0f45-2b55-4c5c-90d0-8f14b09a3149"
+      ],
+      "compositionRows": [
+        {
+          "material": "Ouratite",
+          "materialId": "8723956e-e947-4b84-9dcb-b2c6137895ab",
+          "densityRange": [
+            2.82,
+            6.82
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Ouratite",
+          "materialId": "8723956e-e947-4b84-9dcb-b2c6137895ab",
+          "densityRange": [
+            39.18,
+            83.18
+          ],
+          "qualityRange": [
+            245,
+            490
+          ],
+          "qualityScale": 0.49
+        },
+        {
+          "material": "Agricium",
+          "materialId": "d61d6c33-e428-4014-9326-0b06034de16a",
+          "densityRange": [
+            5,
+            10
+          ],
+          "qualityRange": [
+            395,
+            789
+          ],
+          "qualityScale": 0.789
+        }
+      ]
+    },
+    {
+      "id": "quantanium-d12b4f6dc79d",
+      "primaryMaterial": "Quantanium",
+      "systems": [
+        "Stanton"
+      ],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "46c05568-b83a-4e7b-862c-cc31be4bae50",
+        "f08cf919-8503-430e-9fe6-06e44f0fae31"
+      ],
+      "compositionRows": [
+        {
+          "material": "Beryl",
+          "materialId": "cad02f99-292c-4ee4-93cc-a73868f11ddb",
+          "densityRange": [
+            5,
+            10
+          ],
+          "qualityRange": [
+            395,
+            789
+          ],
+          "qualityScale": 0.789
+        }
+      ]
+    },
+    {
+      "id": "quartz-2f2792d6bcb2",
+      "primaryMaterial": "Quartz",
+      "systems": [],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "01e567b4-4fb1-42ab-a795-5a57381a7449",
+        "7d41c7b9-f437-4600-95d2-f1ea8a544dda",
+        "e0282e1f-73f7-4e7f-a83e-a28e44a456a6"
+      ],
+      "compositionRows": [
+        {
+          "material": "Quartz",
+          "materialId": "1d35c0bc-9142-42ff-8a83-0ec68d69a128",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Agricium",
+          "materialId": "d61d6c33-e428-4014-9326-0b06034de16a",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "quartz-59d8b212a691",
+      "primaryMaterial": "Quartz",
+      "systems": [],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "550fb8c6-1f76-4ff1-87f5-68233e0e1bad",
+        "a119a67b-5989-4498-9621-65f1690f46f2"
+      ],
+      "compositionRows": [
+        {
+          "material": "Quartz",
+          "materialId": "1d35c0bc-9142-42ff-8a83-0ec68d69a128",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "quartz-5e967d31bbed",
+      "primaryMaterial": "Quartz",
+      "systems": [],
+      "mineableKinds": [
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "5d5c5ca2-a702-43fd-af61-30b9079a4574"
+      ],
+      "compositionRows": [
+        {
+          "material": "Quartz",
+          "materialId": "1d35c0bc-9142-42ff-8a83-0ec68d69a128",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Laranite",
+          "materialId": "8375a8d8-1627-4d35-ae91-6f39b373c3ad",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Borase",
+          "materialId": "07f6158a-6494-4b7c-9dd0-bbaab7362137",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "quartz-5f7b6ba1dd6b",
+      "primaryMaterial": "Quartz",
+      "systems": [],
+      "mineableKinds": [
+        "mineable"
+      ],
+      "sourceCompositionGuids": [
+        "e290329a-45aa-4fed-8019-ebe6004bcfd8"
+      ],
+      "compositionRows": [
+        {
+          "material": "Quartz",
+          "materialId": "1d35c0bc-9142-42ff-8a83-0ec68d69a128",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Borase",
+          "materialId": "07f6158a-6494-4b7c-9dd0-bbaab7362137",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "quartz-665a8b18f786",
+      "primaryMaterial": "Quartz",
+      "systems": [],
+      "mineableKinds": [
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "5753e2bb-64e4-4e4c-b0f8-f90b0e3ceffd"
+      ],
+      "compositionRows": [
+        {
+          "material": "Quartz",
+          "materialId": "1d35c0bc-9142-42ff-8a83-0ec68d69a128",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Beryl",
+          "materialId": "cad02f99-292c-4ee4-93cc-a73868f11ddb",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Laranite",
+          "materialId": "8375a8d8-1627-4d35-ae91-6f39b373c3ad",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "quartz-73c42e6690ca",
+      "primaryMaterial": "Quartz",
+      "systems": [],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "0bc82e9d-c0c8-4ffb-961c-28139b9be554",
+        "935b0bd3-c925-4d47-bbd0-a1a5a25ff6cf",
+        "e8291c67-7a49-42b1-9450-8a4e24aeec1a"
+      ],
+      "compositionRows": [
+        {
+          "material": "Quartz",
+          "materialId": "1d35c0bc-9142-42ff-8a83-0ec68d69a128",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Laranite",
+          "materialId": "8375a8d8-1627-4d35-ae91-6f39b373c3ad",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "quartz-a4e50c74fcd3",
+      "primaryMaterial": "Quartz",
+      "systems": [],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "b3b18118-6b00-4bf3-b52d-cd5fe7046d25",
+        "bab95330-d064-451f-81d1-23c559772371"
+      ],
+      "compositionRows": [
+        {
+          "material": "Quartz",
+          "materialId": "1d35c0bc-9142-42ff-8a83-0ec68d69a128",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Beryl",
+          "materialId": "cad02f99-292c-4ee4-93cc-a73868f11ddb",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "quartz-cff81232a93e",
+      "primaryMaterial": "Quartz",
+      "systems": [],
+      "mineableKinds": [
+        "mineable"
+      ],
+      "sourceCompositionGuids": [
+        "e67d273f-7ab9-49f9-858d-8c57a43905c8"
+      ],
+      "compositionRows": [
+        {
+          "material": "Quartz",
+          "materialId": "1d35c0bc-9142-42ff-8a83-0ec68d69a128",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Beryl",
+          "materialId": "cad02f99-292c-4ee4-93cc-a73868f11ddb",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Borase",
+          "materialId": "07f6158a-6494-4b7c-9dd0-bbaab7362137",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "quartz-f6e4fbc136eb",
+      "primaryMaterial": "Quartz",
+      "systems": [
+        "Pyro",
+        "Stanton"
+      ],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "984fcc10-90b2-433f-ba95-79ce692d855b",
+        "9b0c86e4-82bc-42d9-99ea-3201e6072553"
+      ],
+      "compositionRows": [
+        {
+          "material": "Quartz",
+          "materialId": "1d35c0bc-9142-42ff-8a83-0ec68d69a128",
+          "densityRange": [
+            5.7,
+            11.7
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Quartz",
+          "materialId": "1d35c0bc-9142-42ff-8a83-0ec68d69a128",
+          "densityRange": [
+            28.3,
+            78.3
+          ],
+          "qualityRange": [
+            245,
+            490
+          ],
+          "qualityScale": 0.49
+        },
+        {
+          "material": "Silicon",
+          "materialId": "219e8523-b953-4517-812a-0fb2eb023209",
+          "densityRange": [
+            2,
+            5
+          ],
+          "qualityRange": [
+            395,
+            789
+          ],
+          "qualityScale": 0.789
+        }
+      ]
+    },
+    {
+      "id": "riccite-e222d2c8a895",
+      "primaryMaterial": "Riccite",
+      "systems": [
+        "Pyro"
+      ],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "cd1dfb3a-d5cb-4017-8135-3707b863ddf9",
+        "faf633b8-c425-4109-b20f-ccc8180b6bca"
+      ],
+      "compositionRows": [
+        {
+          "material": "Riccite",
+          "materialId": "905e9623-5e74-4a92-9cb1-72203ed8baad",
+          "densityRange": [
+            9.7,
+            15.7
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Riccite",
+          "materialId": "905e9623-5e74-4a92-9cb1-72203ed8baad",
+          "densityRange": [
+            24.3,
+            74.3
+          ],
+          "qualityRange": [
+            245,
+            490
+          ],
+          "qualityScale": 0.49
+        },
+        {
+          "material": "Laranite",
+          "materialId": "8375a8d8-1627-4d35-ae91-6f39b373c3ad",
+          "densityRange": [
+            5,
+            10
+          ],
+          "qualityRange": [
+            395,
+            789
+          ],
+          "qualityScale": 0.789
+        }
+      ]
+    },
+    {
+      "id": "savrillium-441b4ea54006",
+      "primaryMaterial": "Savrillium",
+      "systems": [
+        "Nyx"
+      ],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "3375ee93-f695-40d2-b86c-1ad23802e59b",
+        "d19e906e-e262-4b4d-8713-5c52186f9d2f"
+      ],
+      "compositionRows": [
+        {
+          "material": "Savrillium",
+          "materialId": "6426f04e-2f7d-4c8e-a615-64aa582eaa31",
+          "densityRange": [
+            9.7,
+            15.7
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Savrillium",
+          "materialId": "6426f04e-2f7d-4c8e-a615-64aa582eaa31",
+          "densityRange": [
+            24.3,
+            74.3
+          ],
+          "qualityRange": [
+            245,
+            490
+          ],
+          "qualityScale": 0.49
+        }
+      ]
+    },
+    {
+      "id": "silicon-1fb47f7c1ec2",
+      "primaryMaterial": "Silicon",
+      "systems": [],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "19099114-f146-4c17-b7df-f05f01cf2aef",
+        "59d0affa-9eb3-4ca4-8f39-15bce32dc8ec",
+        "88c76eec-ab66-433e-9fea-b6710baa2b92"
+      ],
+      "compositionRows": [
+        {
+          "material": "Silicon",
+          "materialId": "219e8523-b953-4517-812a-0fb2eb023209",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Agricium",
+          "materialId": "d61d6c33-e428-4014-9326-0b06034de16a",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Stileron",
+          "materialId": "9498a080-84c0-41f4-b88f-71942c60c43f",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Riccite",
+          "materialId": "905e9623-5e74-4a92-9cb1-72203ed8baad",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "silicon-237bb04bbdd5",
+      "primaryMaterial": "Silicon",
+      "systems": [],
+      "mineableKinds": [
+        "mineable"
+      ],
+      "sourceCompositionGuids": [
+        "b41d8685-f69c-4c07-9a81-c9c967d0f992"
+      ],
+      "compositionRows": [
+        {
+          "material": "Silicon",
+          "materialId": "219e8523-b953-4517-812a-0fb2eb023209",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Borase",
+          "materialId": "07f6158a-6494-4b7c-9dd0-bbaab7362137",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Stileron",
+          "materialId": "9498a080-84c0-41f4-b88f-71942c60c43f",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Riccite",
+          "materialId": "905e9623-5e74-4a92-9cb1-72203ed8baad",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "silicon-3560c122ce01",
+      "primaryMaterial": "Silicon",
+      "systems": [],
+      "mineableKinds": [
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "837a5e17-30a2-4cd0-8ef3-1645a956a6a9"
+      ],
+      "compositionRows": [
+        {
+          "material": "Silicon",
+          "materialId": "219e8523-b953-4517-812a-0fb2eb023209",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Beryl",
+          "materialId": "cad02f99-292c-4ee4-93cc-a73868f11ddb",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Laranite",
+          "materialId": "8375a8d8-1627-4d35-ae91-6f39b373c3ad",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Stileron",
+          "materialId": "9498a080-84c0-41f4-b88f-71942c60c43f",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Riccite",
+          "materialId": "905e9623-5e74-4a92-9cb1-72203ed8baad",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "silicon-94a330879e8c",
+      "primaryMaterial": "Silicon",
+      "systems": [],
+      "mineableKinds": [
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "957e399e-ca6c-48fd-882d-90bb431828f9"
+      ],
+      "compositionRows": [
+        {
+          "material": "Silicon",
+          "materialId": "219e8523-b953-4517-812a-0fb2eb023209",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Laranite",
+          "materialId": "8375a8d8-1627-4d35-ae91-6f39b373c3ad",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Borase",
+          "materialId": "07f6158a-6494-4b7c-9dd0-bbaab7362137",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Stileron",
+          "materialId": "9498a080-84c0-41f4-b88f-71942c60c43f",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Riccite",
+          "materialId": "905e9623-5e74-4a92-9cb1-72203ed8baad",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "silicon-95d120096cf2",
+      "primaryMaterial": "Silicon",
+      "systems": [
+        "Pyro",
+        "Stanton"
+      ],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "836eb20c-3a2e-422d-a797-27c2f0ed755d",
+        "eed529e2-a1c1-4227-b0a7-6c5b0acd7823"
+      ],
+      "compositionRows": [
+        {
+          "material": "Silicon",
+          "materialId": "219e8523-b953-4517-812a-0fb2eb023209",
+          "densityRange": [
+            5.7,
+            11.7
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Silicon",
+          "materialId": "219e8523-b953-4517-812a-0fb2eb023209",
+          "densityRange": [
+            28.3,
+            78.3
+          ],
+          "qualityRange": [
+            245,
+            490
+          ],
+          "qualityScale": 0.49
+        }
+      ]
+    },
+    {
+      "id": "silicon-a92d2904d422",
+      "primaryMaterial": "Silicon",
+      "systems": [],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "54394560-d76b-4c1b-b9a8-be5d70e0f7ce",
+        "a8f117a4-d8a2-4c1b-981e-10ed11e3b01d"
+      ],
+      "compositionRows": [
+        {
+          "material": "Silicon",
+          "materialId": "219e8523-b953-4517-812a-0fb2eb023209",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Stileron",
+          "materialId": "9498a080-84c0-41f4-b88f-71942c60c43f",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Riccite",
+          "materialId": "905e9623-5e74-4a92-9cb1-72203ed8baad",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "silicon-b47d86eec716",
+      "primaryMaterial": "Silicon",
+      "systems": [],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "1068347f-f2d2-4d5f-95a8-c58745ca1175",
+        "24390db9-7be1-4a82-a2e5-54fa67c6126d",
+        "cfffa81d-200c-4432-a36e-79debe6ca620"
+      ],
+      "compositionRows": [
+        {
+          "material": "Silicon",
+          "materialId": "219e8523-b953-4517-812a-0fb2eb023209",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Laranite",
+          "materialId": "8375a8d8-1627-4d35-ae91-6f39b373c3ad",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Stileron",
+          "materialId": "9498a080-84c0-41f4-b88f-71942c60c43f",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Riccite",
+          "materialId": "905e9623-5e74-4a92-9cb1-72203ed8baad",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "silicon-d7af7ae51e70",
+      "primaryMaterial": "Silicon",
+      "systems": [],
+      "mineableKinds": [
+        "mineable"
+      ],
+      "sourceCompositionGuids": [
+        "47a8478a-189c-4c41-a834-6cc87a490495"
+      ],
+      "compositionRows": [
+        {
+          "material": "Silicon",
+          "materialId": "219e8523-b953-4517-812a-0fb2eb023209",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Beryl",
+          "materialId": "cad02f99-292c-4ee4-93cc-a73868f11ddb",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Borase",
+          "materialId": "07f6158a-6494-4b7c-9dd0-bbaab7362137",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Stileron",
+          "materialId": "9498a080-84c0-41f4-b88f-71942c60c43f",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Riccite",
+          "materialId": "905e9623-5e74-4a92-9cb1-72203ed8baad",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "silicon-e0e6c7c2883b",
+      "primaryMaterial": "Silicon",
+      "systems": [],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "888dc050-1c48-4b1a-ade6-45df3a240ff9",
+        "e8f5208d-bcab-4fbc-8284-d19c843cfd2f"
+      ],
+      "compositionRows": [
+        {
+          "material": "Silicon",
+          "materialId": "219e8523-b953-4517-812a-0fb2eb023209",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Beryl",
+          "materialId": "cad02f99-292c-4ee4-93cc-a73868f11ddb",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Stileron",
+          "materialId": "9498a080-84c0-41f4-b88f-71942c60c43f",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Riccite",
+          "materialId": "905e9623-5e74-4a92-9cb1-72203ed8baad",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "stileron-7e18d446e95e",
+      "primaryMaterial": "Stileron",
+      "systems": [
+        "Pyro"
+      ],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "30dc2e47-7eb0-4a08-ad72-e943b72f8e3d",
+        "5ec37175-69bd-4d19-a40a-69e7b3eec354"
+      ],
+      "compositionRows": [
+        {
+          "material": "Stileron",
+          "materialId": "9498a080-84c0-41f4-b88f-71942c60c43f",
+          "densityRange": [
+            9.7,
+            15.7
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Stileron",
+          "materialId": "9498a080-84c0-41f4-b88f-71942c60c43f",
+          "densityRange": [
+            24.3,
+            74.3
+          ],
+          "qualityRange": [
+            245,
+            490
+          ],
+          "qualityScale": 0.49
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            5,
+            10
+          ],
+          "qualityRange": [
+            395,
+            789
+          ],
+          "qualityScale": 0.789
+        }
+      ]
+    },
+    {
+      "id": "taranite-5363a324be80",
+      "primaryMaterial": "Taranite",
+      "systems": [
+        "Pyro",
+        "Stanton"
+      ],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "926a392b-6d1f-4cb8-916c-427c7dcc3923",
+        "9c41665b-1eb6-4f4e-ad1a-d01a0a41843e"
+      ],
+      "compositionRows": [
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            5.7,
+            11.7
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            38.3,
+            88.3
+          ],
+          "qualityRange": [
+            245,
+            490
+          ],
+          "qualityScale": 0.49
+        }
+      ]
+    },
+    {
+      "id": "tin-02975d5b3339",
+      "primaryMaterial": "Tin",
+      "systems": [],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "016b5eac-79df-4539-a0c7-cf1fafffe933",
+        "887032ca-b821-41ad-bd60-e1742d67c2bc",
+        "a46a5fc3-a073-4d6e-9916-15be3271ee5f"
+      ],
+      "compositionRows": [
+        {
+          "material": "Tin",
+          "materialId": "16b426e2-7ce1-4fb4-8b34-4d8617dd6a97",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Laranite",
+          "materialId": "8375a8d8-1627-4d35-ae91-6f39b373c3ad",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Stileron",
+          "materialId": "9498a080-84c0-41f4-b88f-71942c60c43f",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Riccite",
+          "materialId": "905e9623-5e74-4a92-9cb1-72203ed8baad",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "tin-1d29288a954d",
+      "primaryMaterial": "Tin",
+      "systems": [],
+      "mineableKinds": [
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "50793a5d-6ab2-46ff-bbf1-323fbb6fbf9d"
+      ],
+      "compositionRows": [
+        {
+          "material": "Tin",
+          "materialId": "16b426e2-7ce1-4fb4-8b34-4d8617dd6a97",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Laranite",
+          "materialId": "8375a8d8-1627-4d35-ae91-6f39b373c3ad",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Borase",
+          "materialId": "07f6158a-6494-4b7c-9dd0-bbaab7362137",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Stileron",
+          "materialId": "9498a080-84c0-41f4-b88f-71942c60c43f",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Riccite",
+          "materialId": "905e9623-5e74-4a92-9cb1-72203ed8baad",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "tin-2697c16fef02",
+      "primaryMaterial": "Tin",
+      "systems": [],
+      "mineableKinds": [
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "9c53b8a1-d1c7-4d5d-a734-1ac6d0269e59"
+      ],
+      "compositionRows": [
+        {
+          "material": "Tin",
+          "materialId": "16b426e2-7ce1-4fb4-8b34-4d8617dd6a97",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Beryl",
+          "materialId": "cad02f99-292c-4ee4-93cc-a73868f11ddb",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Laranite",
+          "materialId": "8375a8d8-1627-4d35-ae91-6f39b373c3ad",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Stileron",
+          "materialId": "9498a080-84c0-41f4-b88f-71942c60c43f",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Riccite",
+          "materialId": "905e9623-5e74-4a92-9cb1-72203ed8baad",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "tin-2e9f66ee095b",
+      "primaryMaterial": "Tin",
+      "systems": [],
+      "mineableKinds": [
+        "mineable"
+      ],
+      "sourceCompositionGuids": [
+        "110a562c-7b95-487a-935c-19e6776231d5"
+      ],
+      "compositionRows": [
+        {
+          "material": "Tin",
+          "materialId": "16b426e2-7ce1-4fb4-8b34-4d8617dd6a97",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Borase",
+          "materialId": "07f6158a-6494-4b7c-9dd0-bbaab7362137",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Stileron",
+          "materialId": "9498a080-84c0-41f4-b88f-71942c60c43f",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Riccite",
+          "materialId": "905e9623-5e74-4a92-9cb1-72203ed8baad",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "tin-52f0ef14938a",
+      "primaryMaterial": "Tin",
+      "systems": [],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "579f8a26-0d19-4236-8cb9-177904006fb2",
+        "d4bd22c4-4e25-4bf2-9a34-dbee8faef4ae",
+        "e25e39e5-f0ba-417b-8f48-5e7f874ebaf7"
+      ],
+      "compositionRows": [
+        {
+          "material": "Tin",
+          "materialId": "16b426e2-7ce1-4fb4-8b34-4d8617dd6a97",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Agricium",
+          "materialId": "d61d6c33-e428-4014-9326-0b06034de16a",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Stileron",
+          "materialId": "9498a080-84c0-41f4-b88f-71942c60c43f",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Riccite",
+          "materialId": "905e9623-5e74-4a92-9cb1-72203ed8baad",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "tin-6fcd67531195",
+      "primaryMaterial": "Tin",
+      "systems": [],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "1f77444a-4c67-4c77-bdf6-af759b7ab057",
+        "d24c10a7-127a-43b3-820d-e455b25efb37"
+      ],
+      "compositionRows": [
+        {
+          "material": "Tin",
+          "materialId": "16b426e2-7ce1-4fb4-8b34-4d8617dd6a97",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Beryl",
+          "materialId": "cad02f99-292c-4ee4-93cc-a73868f11ddb",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Stileron",
+          "materialId": "9498a080-84c0-41f4-b88f-71942c60c43f",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Riccite",
+          "materialId": "905e9623-5e74-4a92-9cb1-72203ed8baad",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "tin-76a1270ef005",
+      "primaryMaterial": "Tin",
+      "systems": [],
+      "mineableKinds": [
+        "mineable"
+      ],
+      "sourceCompositionGuids": [
+        "3e8f5903-6121-496b-8b82-c63af87267ee"
+      ],
+      "compositionRows": [
+        {
+          "material": "Tin",
+          "materialId": "16b426e2-7ce1-4fb4-8b34-4d8617dd6a97",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Beryl",
+          "materialId": "cad02f99-292c-4ee4-93cc-a73868f11ddb",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Borase",
+          "materialId": "07f6158a-6494-4b7c-9dd0-bbaab7362137",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Stileron",
+          "materialId": "9498a080-84c0-41f4-b88f-71942c60c43f",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Riccite",
+          "materialId": "905e9623-5e74-4a92-9cb1-72203ed8baad",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "tin-9691eaf0dbca",
+      "primaryMaterial": "Tin",
+      "systems": [],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "50f176de-e3ef-46e4-8612-731a9fb18854",
+        "cc8831a6-55d4-49d7-aa71-2c7752803d9f"
+      ],
+      "compositionRows": [
+        {
+          "material": "Tin",
+          "materialId": "16b426e2-7ce1-4fb4-8b34-4d8617dd6a97",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Stileron",
+          "materialId": "9498a080-84c0-41f4-b88f-71942c60c43f",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Riccite",
+          "materialId": "905e9623-5e74-4a92-9cb1-72203ed8baad",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "tin-f87b736ef1c5",
+      "primaryMaterial": "Tin",
+      "systems": [
+        "Pyro",
+        "Stanton"
+      ],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "0739cc49-707f-4b00-91fa-f16f6eaadf90",
+        "64799ef4-d78d-4828-b039-73ffcf7470a4"
+      ],
+      "compositionRows": [
+        {
+          "material": "Tin",
+          "materialId": "16b426e2-7ce1-4fb4-8b34-4d8617dd6a97",
+          "densityRange": [
+            9.7,
+            15.7
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Tin",
+          "materialId": "16b426e2-7ce1-4fb4-8b34-4d8617dd6a97",
+          "densityRange": [
+            24.3,
+            74.3
+          ],
+          "qualityRange": [
+            245,
+            490
+          ],
+          "qualityScale": 0.49
+        },
+        {
+          "material": "Copper",
+          "materialId": "ee12edc1-a2c3-4202-909d-9b729a050a3f",
+          "densityRange": [
+            5,
+            10
+          ],
+          "qualityRange": [
+            395,
+            789
+          ],
+          "qualityScale": 0.789
+        }
+      ]
+    },
+    {
+      "id": "titanium-15c9d7cd9ece",
+      "primaryMaterial": "Titanium",
+      "systems": [],
+      "mineableKinds": [
+        "mineable"
+      ],
+      "sourceCompositionGuids": [
+        "0e4542af-12e9-4a81-92f3-82b29b223b89"
+      ],
+      "compositionRows": [
+        {
+          "material": "Titanium",
+          "materialId": "7b9055e5-6d62-44dd-a725-a31d838301eb",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Borase",
+          "materialId": "07f6158a-6494-4b7c-9dd0-bbaab7362137",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "titanium-1927b0d46496",
+      "primaryMaterial": "Titanium",
+      "systems": [
+        "Pyro",
+        "Stanton"
+      ],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "20724d8d-ab6e-4a69-8837-ebd850e2cfab",
+        "d33a13d8-3b81-429d-bb3e-b3f7de912983"
+      ],
+      "compositionRows": [
+        {
+          "material": "Titanium",
+          "materialId": "7b9055e5-6d62-44dd-a725-a31d838301eb",
+          "densityRange": [
+            9.7,
+            15.7
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Titanium",
+          "materialId": "7b9055e5-6d62-44dd-a725-a31d838301eb",
+          "densityRange": [
+            24.3,
+            74.3
+          ],
+          "qualityRange": [
+            245,
+            490
+          ],
+          "qualityScale": 0.49
+        },
+        {
+          "material": "Agricium",
+          "materialId": "d61d6c33-e428-4014-9326-0b06034de16a",
+          "densityRange": [
+            2,
+            5
+          ],
+          "qualityRange": [
+            395,
+            789
+          ],
+          "qualityScale": 0.789
+        },
+        {
+          "material": "Aslarite",
+          "materialId": "9bd0e34c-2b34-42a3-b41d-381088ff6fed",
+          "densityRange": [
+            2,
+            5
+          ],
+          "qualityRange": [
+            395,
+            789
+          ],
+          "qualityScale": 0.789
+        }
+      ]
+    },
+    {
+      "id": "titanium-3cfc766778f3",
+      "primaryMaterial": "Titanium",
+      "systems": [],
+      "mineableKinds": [
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "f91eac38-894b-42c3-b8c2-3f5947512f88"
+      ],
+      "compositionRows": [
+        {
+          "material": "Titanium",
+          "materialId": "7b9055e5-6d62-44dd-a725-a31d838301eb",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Beryl",
+          "materialId": "cad02f99-292c-4ee4-93cc-a73868f11ddb",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Laranite",
+          "materialId": "8375a8d8-1627-4d35-ae91-6f39b373c3ad",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "titanium-3de5a02e95c5",
+      "primaryMaterial": "Titanium",
+      "systems": [],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "2a22233c-5230-4c5d-8878-a07ca08e454a",
+        "87fcd2e9-0b7f-4e56-8a6b-032c72e119e9",
+        "9f970af2-19c3-4de9-8479-083b669e01f8"
+      ],
+      "compositionRows": [
+        {
+          "material": "Titanium",
+          "materialId": "7b9055e5-6d62-44dd-a725-a31d838301eb",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Agricium",
+          "materialId": "d61d6c33-e428-4014-9326-0b06034de16a",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "titanium-5a66174a960c",
+      "primaryMaterial": "Titanium",
+      "systems": [],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "0ddd1307-fa64-4d5e-b99a-8ea47b00e1f2",
+        "66499ada-8589-4ca5-9faa-ccfd29ae8fe3",
+        "d37d2ed4-3244-47b9-b3f9-6c7c99b2860b"
+      ],
+      "compositionRows": [
+        {
+          "material": "Titanium",
+          "materialId": "7b9055e5-6d62-44dd-a725-a31d838301eb",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Laranite",
+          "materialId": "8375a8d8-1627-4d35-ae91-6f39b373c3ad",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "titanium-63ee97206685",
+      "primaryMaterial": "Titanium",
+      "systems": [],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "2cfd5a65-d00e-445c-ae8a-0966b0748563",
+        "d38a3a72-0801-44ef-ab74-cd853d10f486"
+      ],
+      "compositionRows": [
+        {
+          "material": "Titanium",
+          "materialId": "7b9055e5-6d62-44dd-a725-a31d838301eb",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "titanium-6853d2ddb38d",
+      "primaryMaterial": "Titanium",
+      "systems": [],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "8763c193-870c-4327-af4b-eb9596454c33",
+        "d14151b5-d63b-4461-948f-2909ca14136f"
+      ],
+      "compositionRows": [
+        {
+          "material": "Titanium",
+          "materialId": "7b9055e5-6d62-44dd-a725-a31d838301eb",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Beryl",
+          "materialId": "cad02f99-292c-4ee4-93cc-a73868f11ddb",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "titanium-c26ce972b575",
+      "primaryMaterial": "Titanium",
+      "systems": [],
+      "mineableKinds": [
+        "mineable"
+      ],
+      "sourceCompositionGuids": [
+        "457f6c67-a410-4922-899c-7a9311cc4e7c"
+      ],
+      "compositionRows": [
+        {
+          "material": "Titanium",
+          "materialId": "7b9055e5-6d62-44dd-a725-a31d838301eb",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Beryl",
+          "materialId": "cad02f99-292c-4ee4-93cc-a73868f11ddb",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Borase",
+          "materialId": "07f6158a-6494-4b7c-9dd0-bbaab7362137",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "titanium-f12c6f900d62",
+      "primaryMaterial": "Titanium",
+      "systems": [],
+      "mineableKinds": [
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "c1aae900-36cc-4534-a099-e467c6c8de1b"
+      ],
+      "compositionRows": [
+        {
+          "material": "Titanium",
+          "materialId": "7b9055e5-6d62-44dd-a725-a31d838301eb",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Laranite",
+          "materialId": "8375a8d8-1627-4d35-ae91-6f39b373c3ad",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Borase",
+          "materialId": "07f6158a-6494-4b7c-9dd0-bbaab7362137",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "torite-7e8a525a748c",
+      "primaryMaterial": "Torite",
+      "systems": [
+        "Nyx",
+        "Pyro",
+        "Stanton"
+      ],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "98aa6986-1b1b-475b-8488-41ad6182d1da",
+        "ed5af002-dbbc-41aa-b5b3-44e686a83b36"
+      ],
+      "compositionRows": [
+        {
+          "material": "Torite",
+          "materialId": "d0b10af3-e0f3-4bc3-b2d9-737dbb7846cf",
+          "densityRange": [
+            9.7,
+            15.7
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Torite",
+          "materialId": "d0b10af3-e0f3-4bc3-b2d9-737dbb7846cf",
+          "densityRange": [
+            34.3,
+            84.3
+          ],
+          "qualityRange": [
+            245,
+            490
+          ],
+          "qualityScale": 0.49
+        }
+      ]
+    },
+    {
+      "id": "tungsten-47f8fb14b8bb",
+      "primaryMaterial": "Tungsten",
+      "systems": [],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "3fa8f02d-0ea1-4ae9-835b-e6c5458076b6",
+        "ca5e1293-2a47-4cf4-93fd-0af1492731b9",
+        "f0373571-0f08-44df-96a1-0efc20a17728"
+      ],
+      "compositionRows": [
+        {
+          "material": "Tungsten",
+          "materialId": "8f6a7e06-934d-4339-a0a2-75420b81369a",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Laranite",
+          "materialId": "8375a8d8-1627-4d35-ae91-6f39b373c3ad",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "tungsten-5361587703fa",
+      "primaryMaterial": "Tungsten",
+      "systems": [],
+      "mineableKinds": [
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "306609ca-a0c5-4c58-9577-4f1939134355"
+      ],
+      "compositionRows": [
+        {
+          "material": "Tungsten",
+          "materialId": "8f6a7e06-934d-4339-a0a2-75420b81369a",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Laranite",
+          "materialId": "8375a8d8-1627-4d35-ae91-6f39b373c3ad",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Borase",
+          "materialId": "07f6158a-6494-4b7c-9dd0-bbaab7362137",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "tungsten-6e3087ae22f2",
+      "primaryMaterial": "Tungsten",
+      "systems": [],
+      "mineableKinds": [
+        "mineable"
+      ],
+      "sourceCompositionGuids": [
+        "c521b11a-4c13-41a8-96da-abba2db7c167"
+      ],
+      "compositionRows": [
+        {
+          "material": "Tungsten",
+          "materialId": "8f6a7e06-934d-4339-a0a2-75420b81369a",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Beryl",
+          "materialId": "cad02f99-292c-4ee4-93cc-a73868f11ddb",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Borase",
+          "materialId": "07f6158a-6494-4b7c-9dd0-bbaab7362137",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "tungsten-6e52bd4ef018",
+      "primaryMaterial": "Tungsten",
+      "systems": [],
+      "mineableKinds": [
+        "mineable"
+      ],
+      "sourceCompositionGuids": [
+        "24e03cb7-9008-45aa-b2bf-6cb41340089a"
+      ],
+      "compositionRows": [
+        {
+          "material": "Aluminium",
+          "materialId": "3776294d-5689-41f2-b03d-e8fcd17ede6a",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "tungsten-9df6bd2f3c7a",
+      "primaryMaterial": "Tungsten",
+      "systems": [],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "b6bb1702-f844-4614-9121-0c6f1391678a",
+        "dae831ea-ef8d-41c4-9755-bff860d3848f",
+        "e5eea342-672c-4845-b4e8-1981c63bf207"
+      ],
+      "compositionRows": [
+        {
+          "material": "Tungsten",
+          "materialId": "8f6a7e06-934d-4339-a0a2-75420b81369a",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Agricium",
+          "materialId": "d61d6c33-e428-4014-9326-0b06034de16a",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "tungsten-b65a0c961341",
+      "primaryMaterial": "Tungsten",
+      "systems": [],
+      "mineableKinds": [
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "01459f9e-aa10-4156-aa48-72dba75b21ff"
+      ],
+      "compositionRows": [
+        {
+          "material": "Tungsten",
+          "materialId": "8f6a7e06-934d-4339-a0a2-75420b81369a",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "tungsten-d72335377046",
+      "primaryMaterial": "Tungsten",
+      "systems": [],
+      "mineableKinds": [
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "e0e111ee-4cea-4fcd-8432-705dfaeb1b04"
+      ],
+      "compositionRows": [
+        {
+          "material": "Tungsten",
+          "materialId": "8f6a7e06-934d-4339-a0a2-75420b81369a",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Beryl",
+          "materialId": "cad02f99-292c-4ee4-93cc-a73868f11ddb",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Laranite",
+          "materialId": "8375a8d8-1627-4d35-ae91-6f39b373c3ad",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "tungsten-da245bbce6b8",
+      "primaryMaterial": "Tungsten",
+      "systems": [
+        "Pyro",
+        "Stanton"
+      ],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "2aaef6ae-ec1d-41f3-9c33-c6f37c4f4535",
+        "4b7cb296-c7be-4d8b-9c3b-b4c3c3488193"
+      ],
+      "compositionRows": [
+        {
+          "material": "Tungsten",
+          "materialId": "8f6a7e06-934d-4339-a0a2-75420b81369a",
+          "densityRange": [
+            9.7,
+            15.7
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Tungsten",
+          "materialId": "8f6a7e06-934d-4339-a0a2-75420b81369a",
+          "densityRange": [
+            24.3,
+            74.3
+          ],
+          "qualityRange": [
+            245,
+            490
+          ],
+          "qualityScale": 0.49
+        },
+        {
+          "material": "Laranite",
+          "materialId": "8375a8d8-1627-4d35-ae91-6f39b373c3ad",
+          "densityRange": [
+            5,
+            10
+          ],
+          "qualityRange": [
+            395,
+            789
+          ],
+          "qualityScale": 0.789
+        }
+      ]
+    },
+    {
+      "id": "tungsten-df0d62cefc77",
+      "primaryMaterial": "Tungsten",
+      "systems": [],
+      "mineableKinds": [
+        "mineable"
+      ],
+      "sourceCompositionGuids": [
+        "9fd19f1d-32ed-416f-b481-232b6b2fa192"
+      ],
+      "compositionRows": [
+        {
+          "material": "Tungsten",
+          "materialId": "8f6a7e06-934d-4339-a0a2-75420b81369a",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Borase",
+          "materialId": "07f6158a-6494-4b7c-9dd0-bbaab7362137",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    },
+    {
+      "id": "tungsten-dfb85a50eaab",
+      "primaryMaterial": "Tungsten",
+      "systems": [],
+      "mineableKinds": [
+        "mineable",
+        "ship_mineable"
+      ],
+      "sourceCompositionGuids": [
+        "255858ea-6678-4efb-a60c-44b5a2b3aab1",
+        "a8f07aa1-6317-497a-9171-f230237c112f"
+      ],
+      "compositionRows": [
+        {
+          "material": "Tungsten",
+          "materialId": "8f6a7e06-934d-4339-a0a2-75420b81369a",
+          "densityRange": [
+            30,
+            70
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Beryl",
+          "materialId": "cad02f99-292c-4ee4-93cc-a73868f11ddb",
+          "densityRange": [
+            30,
+            60
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        },
+        {
+          "material": "Taranite",
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "densityRange": [
+            20,
+            50
+          ],
+          "qualityRange": [
+            501,
+            1000
+          ],
+          "qualityScale": 1
+        }
+      ]
+    }
+  ]
+}

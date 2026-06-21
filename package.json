@@ -1,6 +1,6 @@
 {
   "name": "siglock",
-  "version": "0.1.0-beta.2",
+  "version": "0.1.0-beta.3",
   "description": "Lightweight mining signature overlay for Star Citizen",
   "type": "module",
   "scripts": {
@@ -10,7 +10,9 @@
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "tauri": "tauri",
-    "validate:updater": "node scripts/validate-updater-manifest.mjs"
+    "validate:updater": "node scripts/validate-updater-manifest.mjs",
+    "data:compositions": "node scripts/generate-rock-compositions.mjs",
+    "test:features": "node scripts/verify-rock-compositions.mjs && node scripts/verify-settings-and-preview.mjs"
   },
   "license": "MIT",
   "dependencies": {

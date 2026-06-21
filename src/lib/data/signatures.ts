@@ -8,6 +8,8 @@
  */
 
 import rawSignatures from './signatures.json';
+import { systemsForMaterial } from './rockCompositions';
+import type { SystemFilter } from '$lib/settings';
 
 export interface SignatureEntry {
   rockCount: number;
@@ -17,6 +19,7 @@ export interface SignatureEntry {
 export interface MaterialSignature {
   materialName: string;
   category?: string;
+  systems?: Exclude<SystemFilter, 'All'>[];
   signatures: SignatureEntry[];
   notes?: string;
 }
@@ -35,6 +38,24 @@ export interface MatchResult {
   delta: number;
   matchType: 'exact' | 'near';
   confidence: number; // 0-1
+  category?: string;
+  systems?: Exclude<SystemFilter, 'All'>[];
+}
+
+export interface MatchOptions {
+  system?: SystemFilter;
+  includeSalvage?: boolean;
+  includeFpsRoc?: boolean;
+}
+
+function materialAllowed(material: MaterialSignature, options?: MatchOptions): boolean {
+  if (options?.includeSalvage === false && material.category?.toLowerCase() === 'salvage') return false;
+  if (options?.includeFpsRoc === false && ['fps', 'vehicle'].includes(material.category?.toLowerCase() ?? '')) return false;
+  const systems = material.systems?.length ? material.systems : systemsForMaterial(material.materialName);
+  if (options?.system && options.system !== 'All' && systems.length) {
+    return systems.includes(options.system);
+  }
+  return true;
 }
 
 // Normalize to support both root array (current) and legacy { materials: [...] } shape.
@@ -69,13 +90,15 @@ export function getSignatures(): SignatureData {
  */
 export function findMatches(
   observed: number,
-  tolerance: number = 25
+  tolerance: number = 25,
+  options?: MatchOptions
 ): MatchResult[] {
   if (!observed || observed < 100) return [];
 
   const results: MatchResult[] = [];
 
   for (const mat of materials) {
+    if (!materialAllowed(mat, options)) continue;
     for (const entry of mat.signatures) {
       if (entry.value === null || entry.value === undefined) continue;
 
@@ -98,6 +121,8 @@ export function findMatches(
           delta,
           matchType,
           confidence: Math.round(confidence * 100) / 100,
+          category: mat.category,
+          systems: (mat.systems?.length ? mat.systems : systemsForMaterial(mat.materialName)) as Exclude<SystemFilter, 'All'>[],
         });
       }
     }
@@ -118,16 +143,18 @@ export function findMatches(
  */
 export function matchObservedValue(
   observed: number,
-  tolerance = 25
+  tolerance = 25,
+  options?: MatchOptions
 ): MatchResult[] {
-  return findMatches(observed, tolerance);
+  return findMatches(observed, tolerance, options);
 }
 
-export function findNearestSignature(observed: number): MatchResult | null {
+export function findNearestSignature(observed: number, options?: MatchOptions): MatchResult | null {
   if (!observed || observed < 100) return null;
 
   let nearest: MatchResult | null = null;
   for (const mat of materials) {
+    if (!materialAllowed(mat, options)) continue;
     for (const entry of mat.signatures) {
       if (entry.value === null || entry.value === undefined) continue;
 
@@ -141,6 +168,8 @@ export function findNearestSignature(observed: number): MatchResult | null {
         delta,
         matchType: delta === 0 ? 'exact' : 'near',
         confidence: 0,
+        category: mat.category,
+        systems: (mat.systems?.length ? mat.systems : systemsForMaterial(mat.materialName)) as Exclude<SystemFilter, 'All'>[],
       };
 
       if (!nearest || Math.abs(candidate.delta) < Math.abs(nearest.delta)) {

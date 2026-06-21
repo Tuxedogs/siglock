@@ -10,12 +10,14 @@
   import { check, type Update } from '@tauri-apps/plugin-updater';
   import { dev } from '$app/environment';
   import { findNearestSignature, matchObservedValue, type MatchResult } from '$lib/data/signatures';
+  import { resolveScanResult, type CompositionStatus, type ScanResult } from '$lib/data/rockCompositions';
   import { buildScanResultKey, isDuplicateResult, normalizeMaterial } from '$lib/scanDedupe';
-  import { DEFAULT_SETTINGS, loadSettings, saveSettings, type SigLockSettings } from '$lib/settings';
+  import { DEFAULT_SETTINGS, loadSettings, saveSettings, type SigLockSettings, type SystemFilter } from '$lib/settings';
 
   type Trigger = 'Manual' | 'Active';
   type ScanStatus = 'matched' | 'no match' | 'invalid' | 'failed' | 'skipped';
   type ShortcutAction = 'manual' | 'auto';
+  type ScanRegion = { x: number; y: number; width: number; height: number };
   type HistoryEntry = {
     id: number;
     timestamp: string;
@@ -30,6 +32,8 @@
     delta: number | null;
     rockCount: number | null;
     confidence: number | null;
+    otherCandidateMaterials: string[];
+    compositionStatus: CompositionStatus;
     status: ScanStatus;
     durationMs: number;
     repeatCount: number;
@@ -37,6 +41,9 @@
   type OverlayMatch = {
     key: string;
     material: string;
+    secondaryMaterials: string[];
+    otherCandidates: string[];
+    compositionStatus: CompositionStatus;
     rockCount: number;
     valueLabel?: string;
     detailLabel?: string;
@@ -75,8 +82,8 @@
   let tolerance = $state(25);
   let matches = $state<MatchResult[]>([]);
   let history = $state<HistoryEntry[]>([]);
-  let hasRegion = $state(false);
-  let regionInfo = $state<string | null>(null);
+  let captureRegion = $state<ScanRegion | null>(null);
+  let regionLoadComplete = $state(false);
   let activeScanOn = $state(false);
   let overlayVisible = $state(true);
   let overlaySetupMode = $state(false);
@@ -94,6 +101,7 @@
   let keybindError = $state<string | null>(null);
   let historyFilter = $state<'all' | 'matches' | 'issues'>('all');
   let capturePreviewUrl = $state<string | null>(null);
+  let capturePreviewError = $state<string | null>(null);
   let debugResult = $state<any>(null);
   let overlayError = $state<string | null>(null);
   let appVersion = $state<string | null>(null);
@@ -109,6 +117,21 @@
   let openSettingsSection = $state<'shortcuts' | 'scan' | 'overlay' | 'advanced'>('shortcuts');
   let unlisteners: UnlistenFn[] = [];
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
+  let capturePreviewLoading = $state(false);
+  let lastCapturePreviewAt = 0;
+  let scannerStatusBeforeRegionPicker = 'Ready';
+  let mainWindowDragActive = false;
+
+  function isValidRegion(region: unknown): region is ScanRegion {
+    if (!region || typeof region !== 'object') return false;
+    const candidate = region as Partial<ScanRegion>;
+    return Number.isInteger(candidate.x)
+      && Number.isInteger(candidate.y)
+      && Number.isInteger(candidate.width)
+      && Number.isInteger(candidate.height)
+      && (candidate.width ?? 0) >= 20
+      && (candidate.height ?? 0) >= 10;
+  }
 
   function persistSettings() {
     if (saveTimer) clearTimeout(saveTimer);
@@ -123,6 +146,20 @@
     }, 150);
   }
 
+  function matchOptions() {
+    return {
+      system: settings.selectedSystemFilter,
+      includeSalvage: settings.returnSalvageResults,
+      includeFpsRoc: settings.includeFpsRocResults,
+    };
+  }
+
+  function materialLabel(material: string, secondaryMaterials: string[] = []): string {
+    return settings.showSecondaryMaterials && secondaryMaterials.length
+      ? `${material} | ${secondaryMaterials.join(' | ')}`
+      : material;
+  }
+
   async function publishOverlayMatches() {
     try {
       await emitTo('overlay', 'overlay-result-updated', {
@@ -134,31 +171,38 @@
     }
   }
 
-  function addOverlayMatches(nextMatches: MatchResult[], rawValue: string) {
+  function addOverlayMatches(scanResult: ScanResult, rawValue: string) {
+    const primary = scanResult.primaryMatch;
+    if (!primary) return;
     const updatedAt = new Date().toISOString();
-    for (const match of [...nextMatches].reverse()) {
-      const key = `${normalizeMaterial(match.material)}|${match.rockCount}|${rawValue.replace(/\D/g, '')}`;
-      const existing = overlayMatches.find((item) => item.key === key);
-      const next: OverlayMatch = {
-        key,
-        material: match.material,
-        rockCount: match.rockCount,
-        valueLabel: rawValue.replace(/\D/g, '') || rawValue,
-        detailLabel: String(match.expected),
-        repeatCount: (existing?.repeatCount ?? 0) + 1,
-        updatedAt,
-      };
-      overlayMatches = [next, ...overlayMatches.filter((item) => item !== existing && item.rockCount > 0)].slice(0, 3);
-    }
+    const normalizedValue = rawValue.replace(/\D/g, '') || rawValue;
+    const key = `${normalizeMaterial(primary.material)}|${primary.rockCount}|${normalizedValue}`;
+    const existing = overlayMatches.find((item) => item.key === key);
+    const next: OverlayMatch = {
+      key,
+      material: primary.material,
+      secondaryMaterials: scanResult.secondaryMaterials,
+      otherCandidates: scanResult.otherCandidates.map((match) => match.material),
+      compositionStatus: scanResult.compositionStatus,
+      rockCount: primary.rockCount,
+      valueLabel: normalizedValue,
+      detailLabel: String(primary.expected),
+      repeatCount: (existing?.repeatCount ?? 0) + 1,
+      updatedAt,
+    };
+    overlayMatches = [next, ...overlayMatches.filter((item) => item !== existing && item.rockCount > 0)].slice(0, 3);
     void publishOverlayMatches();
   }
 
   function showOverlayRead(material: string, valueLabel: string, detailLabel?: string) {
-    if (!settings.showScannedValueOnOverlay) return;
+    if (!settings.showScannedValueOnOverlay || settings.onlyShowSolvedResults) return;
     const updatedAt = new Date().toISOString();
     overlayMatches = [{
       key: `${normalizeMaterial(material)}|0|${valueLabel}|${updatedAt}`,
       material,
+      secondaryMaterials: [],
+      otherCandidates: [],
+      compositionStatus: 'unavailable' as const,
       rockCount: 0,
       valueLabel,
       detailLabel,
@@ -192,18 +236,23 @@
 
   function runManualMatch() {
     const value = Number.parseInt(observed.replace(/\D/g, ''), 10);
-    matches = value >= 100 ? matchObservedValue(value, tolerance) : [];
-    if (matches.length) addOverlayMatches(matches, String(value));
+    matches = value >= 100 ? matchObservedValue(value, tolerance, matchOptions()) : [];
+    if (matches.length) addOverlayMatches(resolveScanResult(matches, settings.selectedSystemFilter), String(value));
   }
 
-  async function refreshRegionStatus() {
+  async function loadSavedRegion(startup = false) {
     try {
-      const region = await invoke<any | null>('get_crop_region');
-      hasRegion = !!region;
-      regionInfo = region ? `${region.width}x${region.height} @ (${region.x}, ${region.y})` : null;
+      const region = await invoke<ScanRegion | null>('get_crop_region');
+      captureRegion = isValidRegion(region) ? region : null;
     } catch {
-      hasRegion = false;
-      regionInfo = null;
+      captureRegion = null;
+    } finally {
+      regionLoadComplete = true;
+      if (startup) {
+        console.info(captureRegion
+          ? '[SigLock] startup region load: found valid saved region'
+          : '[SigLock] startup region load: no valid saved region');
+      }
     }
   }
 
@@ -221,13 +270,15 @@
       delta: null,
       rockCount: null,
       confidence: null,
+      otherCandidateMaterials: [],
+      compositionStatus: 'unavailable',
       status: 'skipped',
       durationMs: 0,
     };
   }
 
   async function performScan(trigger: Trigger) {
-    if (!hasRegion) {
+    if (!captureRegion) {
       scannerStatus = 'Scan skipped: set a region first.';
       addHistory(skippedEntry(trigger, 'No region'));
       return;
@@ -249,14 +300,31 @@
       const durationMs = Math.round(performance.now() - started);
       const normalized = typeof result?.normalized_value === 'number' ? result.normalized_value : null;
       const normalizedSignature = normalized?.toString() ?? rawValue.replace(/\D/g, '');
-      const nextMatches = normalized ? matchObservedValue(normalized, tolerance) : [];
-      const nearest = normalized ? findNearestSignature(normalized) : null;
+      const nextMatches = normalized ? matchObservedValue(normalized, tolerance, matchOptions()) : [];
+      const unfilteredMatches = normalized && !settings.returnSalvageResults
+        ? matchObservedValue(normalized, tolerance, { ...matchOptions(), includeSalvage: true })
+        : nextMatches;
+      const suppressedSalvage = !settings.returnSalvageResults
+        && unfilteredMatches.length > 0
+        && unfilteredMatches.every((match) => match.category?.toLowerCase() === 'salvage');
+      if (suppressedSalvage) {
+        matches = [];
+        ocrError = null;
+        lastScanTime = new Date().toLocaleTimeString();
+        lastScanSummary = 'Salvage result hidden';
+        scannerStatus = 'Salvage result filtered';
+        return;
+      }
+      const nearest = normalized ? findNearestSignature(normalized, matchOptions()) : null;
+      const resolvedScan = resolveScanResult(nextMatches, settings.selectedSystemFilter);
       matches = nextMatches;
       ocrError = result?.error || null;
       lastScanTime = new Date().toLocaleTimeString();
 
       const status: ScanStatus = result?.error ? 'invalid' : nextMatches.length ? 'matched' : normalized ? 'no match' : 'invalid';
-      const material = nextMatches.length ? nextMatches.map((match) => match.material).join(', ') : (result?.error || 'No match');
+      const material = resolvedScan.primaryMatch
+        ? materialLabel(resolvedScan.primaryMatch.material, resolvedScan.secondaryMaterials)
+        : (result?.error || 'No match');
       const confidence = nextMatches[0]?.confidence ?? result?.confidence ?? null;
       lastScanSummary = status === 'matched' ? `${material} (${rawValue})` : `${status}: ${rawValue}`;
       scannerStatus = `${trigger} scan ${status}`;
@@ -274,6 +342,8 @@
         delta: nearest?.delta ?? null,
         rockCount: nextMatches[0]?.rockCount ?? null,
         confidence,
+        otherCandidateMaterials: resolvedScan.otherCandidates.map((match) => match.material),
+        compositionStatus: resolvedScan.compositionStatus,
         status,
         durationMs,
       };
@@ -285,13 +355,13 @@
           incrementDuplicate(lastAcceptedScan);
           scannerStatus = trigger === 'Manual' ? 'Duplicate suppressed' : `${trigger} scan duplicate suppressed`;
         } else {
-          addOverlayMatches(nextMatches, normalizedSignature);
+          addOverlayMatches(resolvedScan, normalizedSignature);
           addHistory(baseHistory);
           lastAcceptedScan = {
             key,
             acceptedAt: now,
             historyId: history[0].id,
-            overlayKeys: nextMatches.map((match) => `${normalizeMaterial(match.material)}|${match.rockCount}|${normalizedSignature}`),
+            overlayKeys: [`${normalizeMaterial(nextMatches[0].material)}|${nextMatches[0].rockCount}|${normalizedSignature}`],
           };
         }
       } else {
@@ -319,6 +389,8 @@
         delta: null,
         rockCount: null,
         confidence: null,
+        otherCandidateMaterials: [],
+        compositionStatus: 'unavailable',
         status: 'failed',
         durationMs: Math.round(performance.now() - started),
       });
@@ -367,8 +439,31 @@
     }
   }
 
-  function startMainWindowDrag(event: MouseEvent) {
-    if (event.button === 0) void getCurrentWindow().startDragging();
+  async function startMainWindowDrag(event: MouseEvent) {
+    if (event.button !== 0 || event.detail > 1 || mainWindowDragActive) return;
+    event.preventDefault();
+    mainWindowDragActive = true;
+    console.info('[SigLock] main window drag start');
+    try {
+      await getCurrentWindow().startDragging();
+    } finally {
+      endMainWindowDrag();
+    }
+  }
+
+  function endMainWindowDrag() {
+    if (!mainWindowDragActive) return;
+    mainWindowDragActive = false;
+    console.info('[SigLock] main window drag end');
+  }
+
+  function endMainWindowDragWhenHidden() {
+    if (document.visibilityState === 'hidden') endMainWindowDrag();
+  }
+
+  function preventTitlebarDoubleClick(event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
   }
 
   async function minimizeWindow() {
@@ -603,11 +698,13 @@
   }
 
   function scannerSummary() {
+    if (!regionLoadComplete) return { value: 'Scanner Paused', detail: 'Loading capture region', tone: 'neutral' };
+    if (!tesseractStatus) return { value: 'Scanner Paused', detail: 'Starting scanner', tone: 'neutral' };
     if (!tesseractStatus?.available) return { value: 'Scanner Error', detail: 'OCR unavailable', tone: 'danger' };
     if (activeScanOn) return { value: 'Auto Running', detail: `${settings.activeScanIntervalMs / 1000}s interval`, tone: 'active' };
-    if (!hasRegion) return { value: 'Scanner Paused', detail: 'Set a capture region', tone: 'warning' };
+    if (!captureRegion) return { value: 'Scanner Paused', detail: 'Set a capture region', tone: 'warning' };
     if (isScanning) return { value: 'Scanner Ready', detail: 'Reading capture region', tone: 'active' };
-    return { value: 'Scanner Ready', detail: 'Waiting for auto scan', tone: 'good' };
+    return { value: 'Scanner Paused', detail: 'Ready when you are', tone: 'good' };
   }
 
   function autoSummary() {
@@ -631,23 +728,49 @@
   }
 
   function regionSize() {
-    return regionInfo?.split(' @ ')[0] ?? null;
+    return captureRegion ? `${captureRegion.width}x${captureRegion.height}` : null;
   }
 
   function regionSummary() {
     const size = regionSize();
-    if (hasRegion && size) {
+    if (!regionLoadComplete) return { value: 'Loading', detail: 'Checking saved region', tone: 'neutral', action: 'Set Region' };
+    if (captureRegion && size) {
       const [width, height] = size.split('x').map((value) => Number.parseInt(value, 10));
       if (!width || !height) return { value: 'Invalid', detail: size, tone: 'danger', action: 'Fix Region' };
       return { value: 'Ready', detail: size, tone: 'good', action: 'Change Region' };
     }
-    if (hasRegion) return { value: 'Invalid', detail: 'Saved region unreadable', tone: 'danger', action: 'Fix Region' };
     return { value: 'Missing', detail: 'No capture region', tone: 'warning', action: 'Set Region' };
   }
 
   function setIntervalSeconds(seconds: number) {
     settings.activeScanIntervalMs = seconds * 1000;
     void updateInterval();
+  }
+
+  function setSystemFilter(system: SystemFilter) {
+    if (settings.selectedSystemFilter === system) return;
+    settings.selectedSystemFilter = system;
+    matches = [];
+    overlayMatches = [];
+    lastAcceptedScan = null;
+    void publishOverlayMatches();
+    persistSettings();
+  }
+
+  function applyResultSettings() {
+    if (settings.onlyShowSolvedResults) {
+      overlayMatches = overlayMatches.filter((match) => match.rockCount > 0);
+    }
+    if (!settings.returnSalvageResults) {
+      overlayMatches = overlayMatches.filter((match) => !/^salvage$/i.test(match.material));
+      history = history.filter((entry) => !(entry.status === 'matched' && /^salvage$/i.test(entry.material)));
+    }
+    if (!settings.includeFpsRocResults) {
+      overlayMatches = overlayMatches.filter((match) => !/^(fps|roc mineable)$/i.test(match.material));
+      history = history.filter((entry) => !(entry.status === 'matched' && /^(fps|roc mineable)(?:\s*\||$)/i.test(entry.material)));
+    }
+    void publishOverlayMatches();
+    persistSettings();
   }
 
   function currentFinds() {
@@ -667,15 +790,15 @@
       bits.push(`nearest: ${entry.nearestCandidateMaterial} ${entry.nearestCandidateValue}, delta ${Math.abs(entry.delta ?? 0)}`);
     }
     if (entry.confidence !== null) bits.push(`${Math.round(entry.confidence * 100)}%`);
+    if (entry.otherCandidateMaterials.length) bits.push(`other candidates: ${entry.otherCandidateMaterials.join(', ')}`);
     return bits.join(' | ');
   }
 
   async function setRegion() {
+    scannerStatusBeforeRegionPicker = scannerStatus;
     scannerStatus = 'Opening region picker...';
     try {
       await invoke('open_region_picker');
-      setTimeout(refreshRegionStatus, 900);
-      setTimeout(refreshRegionStatus, 1800);
     } catch (error) {
       scannerStatus = `Region picker failed: ${String(error)}`;
     }
@@ -683,17 +806,52 @@
 
   async function clearRegion() {
     await invoke('clear_crop_region');
-    await refreshRegionStatus();
+    captureRegion = null;
+    capturePreviewUrl = null;
+    capturePreviewError = null;
+    regionLoadComplete = true;
   }
 
-  async function captureTest() {
+  async function refreshCapturePreview(force = false) {
+    if (!captureRegion) {
+      capturePreviewUrl = null;
+      capturePreviewError = null;
+      return;
+    }
+    if (capturePreviewLoading || (!force && Date.now() - lastCapturePreviewAt < 500)) return;
+    capturePreviewLoading = true;
     try {
       const result: any = await invoke('capture_region_preview');
       capturePreviewUrl = result?.preview_data_url ?? null;
-      scannerStatus = result?.success ? `Captured ${result.width}x${result.height}` : (result?.error || 'Capture failed');
+      capturePreviewError = result?.success ? null : (result?.error || 'Capture unavailable');
+      lastCapturePreviewAt = Date.now();
     } catch (error) {
-      scannerStatus = `Capture failed: ${String(error)}`;
+      capturePreviewError = `Capture unavailable: ${String(error)}`;
+    } finally {
+      capturePreviewLoading = false;
     }
+  }
+
+  function openSettingsPane() {
+    settingsOpen = true;
+    void refreshCapturePreview();
+  }
+
+  function closeSettingsPane() {
+    settingsOpen = false;
+  }
+
+  function openSettings(section: typeof openSettingsSection) {
+    openSettingsSection = section;
+  }
+
+  function mockOverlayMaterials(): { primary: string; secondary: string[] } {
+    const mockMatches = matchObservedValue(3840, 25, { system: 'All', includeSalvage: true });
+    const mockResult = resolveScanResult(mockMatches, 'All');
+    return {
+      primary: mockResult.primaryMatch?.material ?? 'Aslarite',
+      secondary: mockResult.secondaryMaterials,
+    };
   }
 
   async function checkForUpdates() {
@@ -816,6 +974,22 @@
   onMount(async () => {
     document.addEventListener('keydown', captureKeybind, true);
     document.addEventListener('mousedown', captureMouseKeybind, true);
+    document.addEventListener('mouseup', endMainWindowDrag, true);
+    document.addEventListener('mouseleave', endMainWindowDrag, true);
+    document.addEventListener('visibilitychange', endMainWindowDragWhenHidden);
+    window.addEventListener('blur', endMainWindowDrag);
+    unlisteners.push(await listen<ScanRegion>('crop-region-updated', (event) => {
+      if (isValidRegion(event.payload)) {
+        captureRegion = event.payload;
+        regionLoadComplete = true;
+        scannerStatus = 'Capture region saved';
+        if (settingsOpen) void refreshCapturePreview();
+      }
+    }));
+    unlisteners.push(await listen('region-picker-cancelled', () => {
+      scannerStatus = scannerStatusBeforeRegionPicker;
+    }));
+    await loadSavedRegion(true);
     try {
       appVersion = await getVersion();
       settings = await loadSettings();
@@ -849,7 +1023,6 @@
       }
     }
 
-    await refreshRegionStatus();
     try {
       tesseractStatus = await invoke('check_tesseract');
       const appState: any = await invoke('get_app_state');
@@ -871,6 +1044,10 @@
   onDestroy(() => {
     document.removeEventListener('keydown', captureKeybind, true);
     document.removeEventListener('mousedown', captureMouseKeybind, true);
+    document.removeEventListener('mouseup', endMainWindowDrag, true);
+    document.removeEventListener('mouseleave', endMainWindowDrag, true);
+    document.removeEventListener('visibilitychange', endMainWindowDragWhenHidden);
+    window.removeEventListener('blur', endMainWindowDrag);
     unlisteners.forEach((unlisten) => unlisten());
     if (saveTimer) clearTimeout(saveTimer);
   });
@@ -881,16 +1058,16 @@
 <main>
   <header class="topbar">
     <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="drag-title" data-tauri-drag-region onmousedown={startMainWindowDrag}>
-      <img class="brand-mark" src="/siglock-icon.png" alt="" data-tauri-drag-region />
-      <strong data-tauri-drag-region>SigLock</strong>
-      <span data-tauri-drag-region>Mining Signature Overlay</span>
-      <i data-tauri-drag-region></i>
+    <div class="drag-title" onmousedown={startMainWindowDrag} ondblclick={preventTitlebarDoubleClick}>
+      <img class="brand-mark" src="/siglock-icon.png" alt="" />
+      <strong>SigLock</strong>
+      <span>Mining Signature Overlay</span>
+      <i></i>
     </div>
     <div class="top-actions">
       <button class:good={overlaySetupMode} onclick={toggleOverlaySetupMode}>{overlaySetupMode ? 'Lock Overlay' : 'Unlock Overlay'}</button>
       <button class:primary={!activeScanOn} class:active={activeScanOn} onclick={toggleActiveScan}>Auto: {activeScanOn ? 'Stop' : 'Start'}</button>
-      <button class="icon-action" aria-label="Settings" title="Settings" onclick={() => settingsOpen = true}>
+      <button class="icon-action" aria-label="Settings" title="Settings" onclick={openSettingsPane}>
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z" />
           <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1A2 2 0 0 1 4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9L4.2 7A2 2 0 0 1 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1A2 2 0 0 1 19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.5 1h.1a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" />
@@ -900,6 +1077,13 @@
       <button class="window-control close" aria-label="Close" title="Close" onclick={closeApp}>X</button>
     </div>
   </header>
+
+  <nav class="system-filter" aria-label="Signature system filter">
+    <span>System</span>
+    {#each ['All', 'Stanton', 'Pyro', 'Nyx'] as system}
+      <button class:active={settings.selectedSystemFilter === system} onclick={() => setSystemFilter(system as SystemFilter)}>{system}</button>
+    {/each}
+  </nav>
 
   <section class="status-strip" aria-label="Session status">
     <div class="status-card {regionSummary().tone} region-card">
@@ -919,7 +1103,7 @@
       <div class="find-grid">
         {#each currentFinds().slice(0, 3) as match}
           <div class="find-card">
-            <strong>{match.material}</strong>
+            <strong>{materialLabel(match.material, match.secondaryMaterials)}</strong>
             <span>{match.rockCount} rocks{match.valueLabel ? ` | ${match.valueLabel}` : ''}</span>
             <small>Latest</small>
             {#if match.repeatCount > 1}<b>x{match.repeatCount}</b>{/if}
@@ -968,15 +1152,15 @@
   </section>
 
   {#if settingsOpen}
-    <div class="settings-backdrop" role="presentation" onclick={() => settingsOpen = false}></div>
+    <div class="settings-backdrop" role="presentation" onclick={closeSettingsPane}></div>
     <aside class="settings-panel" aria-label="Settings">
       <div class="settings-header">
         <h2>Settings</h2>
-        <button class="window-control" aria-label="Close settings" onclick={() => settingsOpen = false}>X</button>
+        <button class="window-control" aria-label="Close settings" onclick={closeSettingsPane}>X</button>
       </div>
 
       <section class="settings-section">
-        <button class="accordion-header" class:open={openSettingsSection === 'shortcuts'} onclick={() => openSettingsSection = 'shortcuts'}>Shortcuts</button>
+        <button class="accordion-header" class:open={openSettingsSection === 'shortcuts'} onclick={() => openSettings('shortcuts')}>Shortcuts</button>
         {#if openSettingsSection === 'shortcuts'}
           <div class="accordion-body">
             <div class="shortcut-row">
@@ -997,7 +1181,7 @@
       </section>
 
       <section class="settings-section">
-        <button class="accordion-header" class:open={openSettingsSection === 'scan'} onclick={() => openSettingsSection = 'scan'}>Scan</button>
+        <button class="accordion-header" class:open={openSettingsSection === 'scan'} onclick={() => openSettings('scan')}>Scan</button>
         {#if openSettingsSection === 'scan'}
           <div class="accordion-body">
             <div class="button-row">
@@ -1006,16 +1190,25 @@
             </div>
             <div class="interval-control"><span>Interval</span><div class="segment-group">{#each [1, 2, 3, 4] as seconds}<button class:active={settings.activeScanIntervalMs === seconds * 1000} onclick={() => setIntervalSeconds(seconds)}>{seconds}s</button>{/each}</div></div>
             <div class="button-row">
-              <button onclick={clearRegion} disabled={!hasRegion}>Clear Region</button>
-              {#if dev}<button onclick={captureTest} disabled={!hasRegion}>Test Capture</button>{/if}
+              <button onclick={clearRegion} disabled={!captureRegion}>Clear Region</button>
+              <button onclick={() => refreshCapturePreview(true)} disabled={!captureRegion || capturePreviewLoading}>{capturePreviewLoading ? 'Refreshing...' : 'Refresh Preview'}</button>
             </div>
-            {#if dev && capturePreviewUrl}<img class="capture-preview" src={capturePreviewUrl} alt="Capture preview" />{/if}
+            <div class="capture-preview-card">
+              <div><strong>Capture Preview</strong>{#if captureRegion}<span>{captureRegion.width}x{captureRegion.height} saved region</span>{/if}</div>
+              {#if !captureRegion}
+                <p class="region-missing">Region missing — set a capture region to preview it.</p>
+              {:else if capturePreviewUrl}
+                <img class="capture-preview" src={capturePreviewUrl} alt="Live preview of the saved capture region" />
+              {:else}
+                <p>{capturePreviewError ?? 'Loading saved region preview…'}</p>
+              {/if}
+            </div>
           </div>
         {/if}
       </section>
 
       <section class="settings-section">
-        <button class="accordion-header" class:open={openSettingsSection === 'overlay'} onclick={() => openSettingsSection = 'overlay'}>Overlay</button>
+        <button class="accordion-header" class:open={openSettingsSection === 'overlay'} onclick={() => openSettings('overlay')}>Overlay</button>
         {#if openSettingsSection === 'overlay'}
           <div class="accordion-body">
             <div class="button-row">
@@ -1031,7 +1224,18 @@
               <label>Result lifetime <strong>{settings.overlayResultLifetimeSeconds}s</strong><input type="range" min="5" max="120" step="5" bind:value={settings.overlayResultLifetimeSeconds} onchange={persistSettings} /></label>
               <label class="toggle"><input type="checkbox" bind:checked={settings.overlayHighContrast} onchange={persistSettings} /><span></span> High contrast</label>
               <label class="toggle"><input type="checkbox" bind:checked={settings.overlayCompactMode} onchange={persistSettings} /><span></span> Compact mode</label>
-              <label class="toggle"><input type="checkbox" bind:checked={settings.showScannedValueOnOverlay} onchange={persistSettings} /><span></span> Show scanned value on overlay</label>
+              <label class="toggle"><input type="checkbox" bind:checked={settings.returnSalvageResults} onchange={applyResultSettings} /><span></span> Salvage</label>
+              <label class="toggle"><input type="checkbox" bind:checked={settings.includeFpsRocResults} onchange={applyResultSettings} /><span></span> FPS/ROC</label>
+              <label class="toggle"><input type="checkbox" bind:checked={settings.showSecondaryMaterials} onchange={applyResultSettings} /><span></span> Composition</label>
+              <label class="toggle"><input type="checkbox" bind:checked={settings.showScannedValueOnOverlay} onchange={persistSettings} /><span></span> Signature Value</label>
+              <label class="toggle"><input type="checkbox" bind:checked={settings.onlyShowSolvedResults} onchange={applyResultSettings} /><span></span> Only solved captures in overlay</label>
+            </div>
+            <div class="overlay-preview" style={`--preview-text:${settings.overlayTextColor};--preview-bg:${settings.overlayBackgroundColor};--preview-accent:${settings.overlayAccentColor};--preview-opacity:${settings.overlayOpacity};--preview-size:${settings.overlayFontSize}px`}>
+              <small>Overlay Preview</small>
+              <p>
+                {#if settings.showScannedValueOnOverlay}<strong>3840</strong><span>— {materialLabel(mockOverlayMaterials().primary, mockOverlayMaterials().secondary)}</span>
+                {:else}<span>{materialLabel(mockOverlayMaterials().primary, mockOverlayMaterials().secondary)}</span>{/if}
+              </p>
             </div>
           </div>
         {/if}
@@ -1039,11 +1243,11 @@
 
       {#if dev}
         <section class="settings-section">
-          <button class="accordion-header" class:open={openSettingsSection === 'advanced'} onclick={() => openSettingsSection = 'advanced'}>Advanced Debug</button>
+          <button class="accordion-header" class:open={openSettingsSection === 'advanced'} onclick={() => openSettings('advanced')}>Advanced Debug</button>
           {#if openSettingsSection === 'advanced'}
           <div class="accordion-body">
           <label class="field">Tolerance <input type="number" min="0" max="200" bind:value={tolerance} /></label>
-          <pre>{JSON.stringify({ tesseractStatus, debugResult, ocrError, overlayError, keybindError, scannerStatus, regionInfo, lastScanSummary, lastScanTime }, null, 2)}</pre>
+          <pre>{JSON.stringify({ tesseractStatus, debugResult, ocrError, overlayError, keybindError, scannerStatus, captureRegion, lastScanSummary, lastScanTime }, null, 2)}</pre>
           </div>
           {/if}
         </section>
