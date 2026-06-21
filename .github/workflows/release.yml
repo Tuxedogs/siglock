@@ -61,8 +61,7 @@ jobs:
             Download the Windows setup executable below.
           releaseDraft: false
           prerelease: false
-          uploadUpdaterJson: true
-          uploadUpdaterSignatures: true
+          includeUpdaterJson: true
           updaterJsonPreferNsis: true
 
       - name: Validate published updater manifest
