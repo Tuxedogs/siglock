@@ -245,26 +245,36 @@ kbd, .count-pill {
   box-shadow: -18px 0 40px rgba(0, 0, 0, .3);
 }
 .settings-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-.settings-panel section { border-top: 1px solid rgba(130, 150, 180, .12); }
-.settings-section { padding: 0; }
+.settings-section {
+  margin-top: 12px;
+  overflow: hidden;
+  background: rgba(17, 25, 35, .34);
+  border: 1px solid rgba(130, 150, 180, .14);
+  border-radius: 8px;
+}
 .accordion-header {
   width: 100%;
   justify-content: space-between;
-  min-height: 38px;
-  padding: 9px 2px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 10px 12px;
   color: #c9d4e2;
-  background: transparent;
+  background: rgba(22, 32, 45, .22);
   border: 0;
   border-radius: 0;
-  font-size: 11px;
-  font-weight: 800;
   text-align: left;
-  text-transform: uppercase;
 }
-.accordion-header::after { color: var(--faint); content: "+"; }
-.accordion-header.open::after { content: "-"; }
-.accordion-header:hover:not(:disabled) { background: transparent; color: white; border-color: transparent; }
-.accordion-body { padding: 0 0 12px; }
+.accordion-heading { display: grid; gap: 3px; min-width: 0; }
+.accordion-heading strong { color: #dce5ef; font-size: 11px; font-weight: 800; text-transform: uppercase; }
+.accordion-heading small { color: var(--muted); font-size: 9px; font-weight: 400; text-transform: none; }
+.accordion-indicator { position: relative; flex: 0 0 14px; width: 14px; height: 14px; margin-left: auto; color: var(--faint); }
+.accordion-indicator::before, .accordion-indicator::after { position: absolute; top: 6px; left: 2px; width: 10px; height: 1px; background: currentColor; content: ""; }
+.accordion-indicator::after { transform: rotate(90deg); transition: transform .15s ease; }
+.accordion-header.open .accordion-indicator::after { transform: rotate(0deg); }
+.accordion-header:hover:not(:disabled) { background: rgba(37, 52, 70, .38); color: white; border-color: transparent; }
+.accordion-body { padding: 1px 12px 12px; }
 .shortcut-row {
   display: grid;
   grid-template-columns: minmax(120px, 1fr) minmax(98px, auto) auto auto;

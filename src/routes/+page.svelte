@@ -1196,9 +1196,12 @@
       </div>
 
       <section class="settings-section">
-        <button class="accordion-header" class:open={openSettingsSection === 'shortcuts'} onclick={() => openSettings('shortcuts')}>Shortcuts</button>
+        <button class="accordion-header" class:open={openSettingsSection === 'shortcuts'} aria-expanded={openSettingsSection === 'shortcuts'} aria-controls="settings-shortcuts" onclick={() => openSettings('shortcuts')}>
+          <span class="accordion-heading"><strong>Shortcuts</strong><small>Configure keyboard and mouse shortcuts.</small></span>
+          <span class="accordion-indicator" aria-hidden="true"></span>
+        </button>
         {#if openSettingsSection === 'shortcuts'}
-          <div class="accordion-body">
+          <div class="accordion-body" id="settings-shortcuts">
             <div class="shortcut-row">
               <strong>Manual Scan</strong>
               <kbd>{capturingShortcutAction === 'manual' ? 'Press a key or mouse button...' : keybindLabel(settings.scanNowKeybind)}</kbd>
@@ -1217,9 +1220,12 @@
       </section>
 
       <section class="settings-section">
-        <button class="accordion-header" class:open={openSettingsSection === 'scan'} onclick={() => openSettings('scan')}>Scan</button>
+        <button class="accordion-header" class:open={openSettingsSection === 'scan'} aria-expanded={openSettingsSection === 'scan'} aria-controls="settings-scan" onclick={() => openSettings('scan')}>
+          <span class="accordion-heading"><strong>Scan</strong><small>Configure scanner behavior, timing and detection.</small></span>
+          <span class="accordion-indicator" aria-hidden="true"></span>
+        </button>
         {#if openSettingsSection === 'scan'}
-          <div class="accordion-body">
+          <div class="accordion-body" id="settings-scan">
             <div class="button-row">
               <input class="signature-input" aria-label="Test signature" placeholder="Test signature" bind:value={observed} onkeydown={(event) => event.key === 'Enter' && runManualMatch()} />
               <button onclick={runManualMatch}>Match Value</button>
@@ -1244,9 +1250,12 @@
       </section>
 
       <section class="settings-section">
-        <button class="accordion-header" class:open={openSettingsSection === 'overlay'} onclick={() => openSettings('overlay')}>Overlay</button>
+        <button class="accordion-header" class:open={openSettingsSection === 'overlay'} aria-expanded={openSettingsSection === 'overlay'} aria-controls="settings-overlay" onclick={() => openSettings('overlay')}>
+          <span class="accordion-heading"><strong>Overlay</strong><small>Configure display, positioning and HUD behavior.</small></span>
+          <span class="accordion-indicator" aria-hidden="true"></span>
+        </button>
         {#if openSettingsSection === 'overlay'}
-          <div class="accordion-body">
+          <div class="accordion-body" id="settings-overlay">
             <div class="button-row">
               <button class:active={overlaySetupMode} onclick={toggleOverlaySetupMode}>{overlaySetupMode ? 'Lock Overlay' : 'Unlock Overlay'}</button>
               <button onclick={resetOverlayPosition}>Reset Position</button>
@@ -1285,9 +1294,12 @@
 
       {#if dev}
         <section class="settings-section">
-          <button class="accordion-header" class:open={openSettingsSection === 'advanced'} onclick={() => openSettings('advanced')}>Advanced Debug</button>
+          <button class="accordion-header" class:open={openSettingsSection === 'advanced'} aria-expanded={openSettingsSection === 'advanced'} aria-controls="settings-advanced" onclick={() => openSettings('advanced')}>
+            <span class="accordion-heading"><strong>Advanced Debug</strong><small>Diagnostics, OCR and troubleshooting options.</small></span>
+            <span class="accordion-indicator" aria-hidden="true"></span>
+          </button>
           {#if openSettingsSection === 'advanced'}
-          <div class="accordion-body">
+          <div class="accordion-body" id="settings-advanced">
           <label class="field">Tolerance <input type="number" min="0" max="200" bind:value={tolerance} /></label>
           <pre>{JSON.stringify({ tesseractStatus, debugResult, ocrError, overlayError, keybindError, scannerStatus, captureRegion, lastScanSummary, lastScanTime }, null, 2)}</pre>
           </div>
