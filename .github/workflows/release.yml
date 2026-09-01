@@ -53,16 +53,15 @@ jobs:
           tagName: v__VERSION__
           releaseName: ${{ steps.release_meta.outputs.title }}
           releaseBody: |
-            SigLock v0.1.0 Beta 3 open beta build.
+            SigLock v0.1.0 Beta 4 open beta build.
 
-            This release adds capture and overlay previews, result controls, composition data, and system-aware signature disambiguation.
-            It also fixes region startup state, picker completion, titlebar dragging, and repeated debug capture writes.
+            This release refines Settings organization with clearer section hierarchy,
+            descriptions, and accessible expand/collapse controls.
 
             Download the Windows setup executable below.
           releaseDraft: false
           prerelease: false
-          uploadUpdaterJson: true
-          uploadUpdaterSignatures: true
+          includeUpdaterJson: true
           updaterJsonPreferNsis: true
 
       - name: Validate published updater manifest

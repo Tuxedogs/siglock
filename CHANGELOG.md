@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.1.0-beta.4
+
+### Improvements
+
+- Refined Settings into distinct Shortcuts, Scan, Overlay, and Advanced Debug sections.
+- Added concise section descriptions and clearer expand/collapse indicators.
+- Kept version, update, and release-note controls visually separate from Settings content.
+
 ## v0.1.0-beta.3
 
 ### Added
