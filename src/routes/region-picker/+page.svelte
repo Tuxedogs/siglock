@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
+  import { emitTo } from '@tauri-apps/api/event';
   import { getCurrentWindow } from '@tauri-apps/api/window';
 
   let startX = 0;
@@ -9,6 +10,9 @@
   let currentY = 0;
   let isSelecting = false;
   let selectionBox: HTMLDivElement;
+  let pickerOriginX = 0;
+  let pickerOriginY = 0;
+  let pickerScaleFactor = 1;
 
   let status = 'Drag to select the area where the scan number appears. Press Esc to cancel.';
 
@@ -54,22 +58,21 @@
 
     // Validate minimum size
     if (width < 30 || height < 15) {
-      status = 'Selection too small. Try again.';
+      status = `Selection too small (${Math.round(width)}x${Math.round(height)}). Keep your saved region or choose a larger area.`;
       if (selectionBox) selectionBox.style.display = 'none';
       return;
     }
 
-    // For v1: Assume picker window covers primary monitor starting at ~ (0,0)
-    // In real multi-monitor this would need monitor info from Rust.
     const region = {
-      x: Math.round(x),
-      y: Math.round(y),
-      width: Math.round(width),
-      height: Math.round(height),
+      x: pickerOriginX + Math.round(x * pickerScaleFactor),
+      y: pickerOriginY + Math.round(y * pickerScaleFactor),
+      width: Math.round(width * pickerScaleFactor),
+      height: Math.round(height * pickerScaleFactor),
     };
 
     try {
       await invoke('set_crop_region', { region });
+      await emitTo('main', 'crop-region-updated', region);
       status = 'Region saved!';
       // Close immediately after successful save
       await getCurrentWindow().close();
@@ -82,9 +85,13 @@
     }
   }
 
-  function cancel() {
-    // Close immediately on cancel (Escape or other)
-    getCurrentWindow().close();
+  async function cancel() {
+    console.info('[SigLock] region picker cancelled, preserving existing region');
+    try {
+      await emitTo('main', 'region-picker-cancelled');
+    } finally {
+      await getCurrentWindow().close();
+    }
   }
 
   function handleKey(e: KeyboardEvent) {
@@ -94,6 +101,15 @@
   }
 
   onMount(async () => {
+    const pickerWindow = getCurrentWindow();
+    const [innerPosition, scaleFactor] = await Promise.all([
+      pickerWindow.innerPosition(),
+      pickerWindow.scaleFactor(),
+    ]);
+    pickerOriginX = innerPosition.x;
+    pickerOriginY = innerPosition.y;
+    pickerScaleFactor = scaleFactor;
+
     document.addEventListener('keydown', handleKey);
     document.addEventListener('mousedown', onMouseDown);
     document.addEventListener('mousemove', onMouseMove);

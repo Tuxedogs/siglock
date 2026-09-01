@@ -1,5 +1,7 @@
 import { Store } from '@tauri-apps/plugin-store';
 
+export type SystemFilter = 'All' | 'Stanton' | 'Pyro' | 'Nyx';
+
 export interface SigLockSettings {
   scanNowKeybind: string;
   toggleAutoScanKeybind: string;
@@ -14,6 +16,11 @@ export interface SigLockSettings {
   showScannedValueOnOverlay: boolean;
   overlayResultLifetimeSeconds: number;
   rollingHistoryLimit: number;
+  showComposition: boolean;
+  returnSalvageResults: boolean;
+  includeFpsRocResults: boolean;
+  onlyShowSolvedResults: boolean;
+  selectedSystemFilter: SystemFilter;
 }
 
 export const DEFAULT_SETTINGS: SigLockSettings = {
@@ -30,6 +37,11 @@ export const DEFAULT_SETTINGS: SigLockSettings = {
   showScannedValueOnOverlay: false,
   overlayResultLifetimeSeconds: 20,
   rollingHistoryLimit: 30,
+  showComposition: false,
+  returnSalvageResults: true,
+  includeFpsRocResults: true,
+  onlyShowSolvedResults: false,
+  selectedSystemFilter: 'All',
 };
 
 let store: Store | null = null;
@@ -45,7 +57,14 @@ function numberInRange(value: unknown, fallback: number, min: number, max: numbe
 }
 
 export function sanitizeSettings(value: unknown): SigLockSettings {
-  const raw = value && typeof value === 'object' ? value as Partial<SigLockSettings> : {};
+  const raw = value && typeof value === 'object'
+    ? value as Partial<SigLockSettings> & { showSecondaryMaterials?: boolean }
+    : {};
+  const showComposition = typeof raw.showComposition === 'boolean'
+    ? raw.showComposition
+    : typeof raw.showSecondaryMaterials === 'boolean'
+      ? raw.showSecondaryMaterials
+      : DEFAULT_SETTINGS.showComposition;
   return {
     scanNowKeybind: typeof raw.scanNowKeybind === 'string' && raw.scanNowKeybind.trim().length > 0
       ? raw.scanNowKeybind
@@ -64,6 +83,13 @@ export function sanitizeSettings(value: unknown): SigLockSettings {
     showScannedValueOnOverlay: typeof raw.showScannedValueOnOverlay === 'boolean' ? raw.showScannedValueOnOverlay : DEFAULT_SETTINGS.showScannedValueOnOverlay,
     overlayResultLifetimeSeconds: numberInRange(raw.overlayResultLifetimeSeconds, DEFAULT_SETTINGS.overlayResultLifetimeSeconds, 5, 120),
     rollingHistoryLimit: numberInRange(raw.rollingHistoryLimit, DEFAULT_SETTINGS.rollingHistoryLimit, 25, 50),
+    showComposition,
+    returnSalvageResults: typeof raw.returnSalvageResults === 'boolean' ? raw.returnSalvageResults : DEFAULT_SETTINGS.returnSalvageResults,
+    includeFpsRocResults: typeof raw.includeFpsRocResults === 'boolean' ? raw.includeFpsRocResults : DEFAULT_SETTINGS.includeFpsRocResults,
+    onlyShowSolvedResults: typeof raw.onlyShowSolvedResults === 'boolean' ? raw.onlyShowSolvedResults : DEFAULT_SETTINGS.onlyShowSolvedResults,
+    selectedSystemFilter: ['All', 'Stanton', 'Pyro', 'Nyx'].includes(raw.selectedSystemFilter ?? '')
+      ? raw.selectedSystemFilter as SystemFilter
+      : DEFAULT_SETTINGS.selectedSystemFilter,
   };
 }
 

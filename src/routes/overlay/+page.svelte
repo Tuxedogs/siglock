@@ -3,10 +3,19 @@
   import { invoke } from '@tauri-apps/api/core';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import { loadSettingsReadOnly, type SigLockSettings } from '$lib/settings';
+  import {
+    resolveRockComposition,
+    type CompositionEntry,
+    type CompositionStatus,
+    type MaterialCompositionProfile,
+  } from '$lib/data/rockCompositions';
 
   type OverlayMatch = {
     key: string;
     material: string;
+    compositionProfile?: MaterialCompositionProfile | null;
+    otherCandidates?: string[];
+    compositionStatus?: CompositionStatus;
     rockCount: number;
     valueLabel?: string;
     detailLabel?: string;
@@ -44,8 +53,32 @@
 
   let visibleMatches = $derived(matches.filter((match) => {
     if (!settings) return true;
+    if (settings.onlyShowSolvedResults && match.rockCount <= 0) return false;
     return now - new Date(match.updatedAt).getTime() < settings.overlayResultLifetimeSeconds * 1000;
   }).slice(0, 3));
+
+  function mockPreviewMatch(): OverlayMatch {
+    const composition = resolveRockComposition('Agricium');
+    return {
+      key: 'overlay-preview',
+      material: 'Agricium',
+      compositionProfile: composition.compositionProfile,
+      otherCandidates: [],
+      compositionStatus: composition.compositionStatus,
+      rockCount: 1,
+      valueLabel: '3840',
+      detailLabel: 'Solved signature',
+      repeatCount: 1,
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  function compositionPercent(entry: CompositionEntry) {
+    const format = (value: number) => Number.isInteger(value) ? String(value) : value.toFixed(1);
+    return `${format(entry.percentMin)}-${format(entry.percentMax)}%`;
+  }
+
+  let displayedMatches = $derived(setupMode ? [mockPreviewMatch()] : visibleMatches);
 
   onMount(async () => {
     settings = await loadSettingsReadOnly();
@@ -62,7 +95,7 @@
   });
 </script>
 
-{#if setupMode || visibleMatches.length}
+{#if setupMode || displayedMatches.length}
 <div class="overlay-shell">
   {#if setupMode}
     <div class="setup-handle" data-tauri-drag-region>
@@ -70,13 +103,21 @@
       <button onclick={anchorOverlay}>Anchor</button>
     </div>
   {/if}
-  {#if visibleMatches.length}
+  {#if displayedMatches.length}
     <div class="matches">
-      {#each visibleMatches as match (match.key)}
+      {#each displayedMatches as match (match.key)}
         <div class="match-item">
           <p>{#if match.rockCount > 0}<strong>x{match.rockCount}</strong>{/if}<span>{match.material}</span>{#if match.repeatCount > 1}<b>x{match.repeatCount}</b>{/if}</p>
           {#if settings?.showScannedValueOnOverlay && (match.valueLabel || match.detailLabel)}
             <small>{match.valueLabel || match.detailLabel}</small>
+          {/if}
+          {#if settings?.showComposition && match.rockCount > 0 && match.compositionProfile?.entries?.length}
+            <div class="composition-block">
+              <em>Trace materials</em>
+              {#each match.compositionProfile.entries as entry}
+                <span>{entry.displayName} {compositionPercent(entry)}</span>
+              {/each}
+            </div>
           {/if}
         </div>
       {/each}
@@ -152,6 +193,24 @@
     margin-top: -1px;
     color: color-mix(in srgb, var(--result-text, #e5e7eb) 72%, transparent);
     font: 700 .78em ui-monospace, monospace;
+  }
+  .composition-block {
+    display: grid;
+    gap: 1px;
+    margin-top: 3px;
+    padding-left: 15px;
+  }
+  .composition-block em {
+    color: color-mix(in srgb, var(--result-text, #e5e7eb) 66%, transparent);
+    font-size: .72em;
+    font-style: normal;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+  }
+  .composition-block span {
+    color: color-mix(in srgb, var(--result-text, #e5e7eb) 82%, transparent);
+    font: 600 .76em/1.25 ui-monospace, monospace;
+    white-space: nowrap;
   }
   .matches strong { color: var(--result-accent, #3b82f6); font-family: ui-monospace, monospace; }
   .matches b { margin-left: 2px; color: color-mix(in srgb, var(--result-text, #e5e7eb) 70%, transparent); font: 700 .78em ui-monospace, monospace; }

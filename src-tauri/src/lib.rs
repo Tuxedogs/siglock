@@ -1,15 +1,18 @@
 use base64::engine::general_purpose;
 use base64::Engine;
 use serde::{Deserialize, Serialize};
-use std::io::Write;
+use std::fs::OpenOptions;
+use std::io::{Cursor, Write};
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
-use tauri::{Emitter, LogicalPosition, Manager, PhysicalPosition, Position, State, WindowEvent};
+use tauri::{
+    Emitter, LogicalPosition, Manager, PhysicalPosition, Position, Size, State, WindowEvent,
+};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use tokio::time::sleep;
 
@@ -57,6 +60,7 @@ pub struct MatchResult {
 #[derive(Serialize, Clone, Debug)]
 pub struct OcrScanResult {
     pub raw_text: String,
+    pub normalized_text: Option<String>,
     pub normalized_value: Option<u32>,
     pub confidence: Option<f32>,
     pub scanned_at: String,
@@ -69,7 +73,7 @@ pub struct OcrScanResult {
 }
 
 /// Configuration for preprocessing and Tesseract (dev tunable)
-#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
 pub struct OcrConfig {
     pub upscale: u32, // 1, 2, 3, 4
     pub threshold_enabled: bool,
@@ -91,8 +95,7 @@ pub struct OcrConfig {
 //     1. Bundled app-local path (resources/tesseract/)
 //     2. User-configured custom path (from store)
 //     3. System PATH fallback
-// - All dev/debug artifacts go through isolated subdirectories.
-// - Only "latest" debug files are kept (no endless accumulation).
+// - OCR working files use the system temporary directory and are removed after use.
 
 /// Returns the base app data directory using Tauri's proper resolver.
 /// This is the correct way for both development and packaged apps.
@@ -100,13 +103,6 @@ fn get_app_data_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     app.path()
         .app_data_dir()
         .map_err(|e| format!("Failed to resolve app data directory: {}", e))
-}
-
-/// Returns the directory used for debug captures and OCR working files.
-/// This is isolated and will be easy to clean or change in packaged builds.
-fn get_debug_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    let base = get_app_data_dir(app)?;
-    Ok(base.join("siglock").join("debug"))
 }
 
 fn get_native_settings_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -242,7 +238,7 @@ pub struct CaptureResult {
 /// Hard-coded signature index (26 materials)
 static MATERIALS: &[Material] = &[
     Material {
-        name: "Quantainium",
+        name: "Quantanium",
         base: 3170,
         category: Some("High value"),
     },
@@ -414,7 +410,7 @@ fn match_signature(observed: u32, tolerance: Option<i32>) -> Vec<MatchResult> {
 
 // ==================== App State ====================
 
-#[derive(Serialize, Deserialize, Default, Clone, Debug)]
+#[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq, Eq)]
 pub struct ScanRegion {
     pub x: i32,
     pub y: i32,
@@ -443,6 +439,7 @@ struct AppStateInner {
 }
 
 type AppState = Arc<Mutex<AppStateInner>>;
+type NativeSettingsState = Arc<Mutex<NativeSettings>>;
 
 /// Controller for the single active scan timer task
 struct ActiveScanController {
@@ -476,10 +473,20 @@ fn default_state() -> AppStateInner {
     }
 }
 
-#[derive(Serialize, Deserialize, Default, Clone, Debug)]
+#[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq, Eq)]
 struct NativeSettings {
     region: Option<ScanRegion>,
     overlay_position: Option<(i32, i32)>,
+}
+
+fn validate_scan_region(region: &ScanRegion) -> Result<(), String> {
+    if region.width < 20 || region.height < 10 {
+        return Err(format!(
+            "Capture region is too small ({}x{}). Keep the previous saved region or choose a larger area.",
+            region.width, region.height
+        ));
+    }
+    Ok(())
 }
 
 fn load_native_settings(app: &tauri::AppHandle) -> NativeSettings {
@@ -494,24 +501,60 @@ fn load_native_settings(app: &tauri::AppHandle) -> NativeSettings {
 
 fn save_native_settings(app: &tauri::AppHandle, settings: &NativeSettings) -> Result<(), String> {
     let path = get_native_settings_path(app)?;
+    write_native_settings_file(&path, settings)
+}
+
+fn write_native_settings_file(path: &Path, settings: &NativeSettings) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     let value = serde_json::to_vec_pretty(settings).map_err(|e| e.to_string())?;
-    std::fs::write(path, value).map_err(|e| e.to_string())
+    // Renaming a temporary file over an existing file fails on Windows. Open the
+    // settings file in truncate mode instead, then flush it before reporting a
+    // successful save so a selected region survives the next launch.
+    let mut file = OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(path)
+        .map_err(|e| format!("Failed to open {}: {}", path.display(), e))?;
+    file.write_all(&value)
+        .map_err(|e| format!("Failed to write {}: {}", path.display(), e))?;
+    file.sync_all()
+        .map_err(|e| format!("Failed to flush {}: {}", path.display(), e))?;
+    Ok(())
 }
 
-fn save_region(app: &tauri::AppHandle, region: Option<ScanRegion>) -> Result<(), String> {
-    let mut settings = load_native_settings(app);
-    settings.region = region;
-    save_native_settings(app, &settings)
+fn save_region(
+    app: &tauri::AppHandle,
+    native_settings: &NativeSettingsState,
+    region: Option<ScanRegion>,
+) -> Result<(), String> {
+    let mut settings = native_settings.lock().unwrap();
+    let mut next_settings = settings.clone();
+    next_settings.region = region.clone();
+    save_native_settings(app, &next_settings)?;
+    let persisted = load_native_settings(app);
+    let saved_ok = persisted.region == region;
+    println!(
+        "[SigLock] region persistence {} after save: {:?}",
+        if saved_ok { "verified" } else { "FAILED" },
+        region
+    );
+    if saved_ok {
+        *settings = next_settings;
+        Ok(())
+    } else {
+        Err("Region save verification failed.".to_string())
+    }
 }
 
 fn save_overlay_position(
     app: &tauri::AppHandle,
+    native_settings: &NativeSettingsState,
     position: PhysicalPosition<i32>,
 ) -> Result<(), String> {
-    let mut settings = load_native_settings(app);
+    let mut settings = native_settings.lock().unwrap();
     settings.overlay_position = Some((position.x, position.y));
     save_native_settings(app, &settings)
 }
@@ -670,7 +713,10 @@ fn set_overlay_setup_mode(
 }
 
 #[tauri::command]
-fn reset_overlay_position(app: tauri::AppHandle) -> Result<(), String> {
+fn reset_overlay_position(
+    app: tauri::AppHandle,
+    native_settings: State<'_, NativeSettingsState>,
+) -> Result<(), String> {
     let window = app
         .get_webview_window("overlay")
         .ok_or_else(|| "Overlay window not found".to_string())?;
@@ -678,7 +724,11 @@ fn reset_overlay_position(app: tauri::AppHandle) -> Result<(), String> {
         .set_position(Position::Logical(LogicalPosition::new(80.0, 120.0)))
         .map_err(|e| e.to_string())?;
     log_window_lifecycle(&app, "overlay", "set_position", "overlay_update");
-    save_overlay_position(&app, window.outer_position().map_err(|e| e.to_string())?)
+    save_overlay_position(
+        &app,
+        native_settings.inner(),
+        window.outer_position().map_err(|e| e.to_string())?,
+    )
 }
 
 #[tauri::command]
@@ -812,11 +862,14 @@ fn get_app_state(state: State<'_, AppState>) -> Result<serde_json::Value, String
 async fn set_crop_region(
     region: ScanRegion,
     state: State<'_, AppState>,
+    native_settings: State<'_, NativeSettingsState>,
     app: tauri::AppHandle,
 ) -> Result<(), String> {
+    validate_scan_region(&region)?;
+    save_region(&app, native_settings.inner(), Some(region.clone()))?;
     let mut s = state.lock().unwrap();
-    s.region = Some(region.clone());
-    save_region(&app, Some(region))
+    s.region = Some(region);
+    Ok(())
 }
 
 #[tauri::command]
@@ -828,11 +881,13 @@ fn get_crop_region(state: State<'_, AppState>) -> Result<Option<ScanRegion>, Str
 #[tauri::command]
 async fn clear_crop_region(
     state: State<'_, AppState>,
+    native_settings: State<'_, NativeSettingsState>,
     app: tauri::AppHandle,
 ) -> Result<(), String> {
+    save_region(&app, native_settings.inner(), None)?;
     let mut s = state.lock().unwrap();
     s.region = None;
-    save_region(&app, None)
+    Ok(())
 }
 
 #[tauri::command]
@@ -878,22 +933,44 @@ async fn open_region_picker(app: tauri::AppHandle) -> Result<(), String> {
         return Ok(());
     }
 
-    tauri::WebviewWindowBuilder::new(
+    let monitor = app
+        .get_webview_window("main")
+        .and_then(|window| window.current_monitor().ok().flatten())
+        .or_else(|| app.primary_monitor().ok().flatten());
+    let monitor_position = monitor
+        .as_ref()
+        .map(|value| value.position().to_owned())
+        .unwrap_or_else(|| PhysicalPosition::new(0, 0));
+    let monitor_size = monitor
+        .as_ref()
+        .map(|value| value.size().to_owned())
+        .unwrap_or_else(|| tauri::PhysicalSize::new(1920, 1080));
+
+    let picker = tauri::WebviewWindowBuilder::new(
         &app,
         "region_picker",
         tauri::WebviewUrl::App("/region-picker".into()),
     )
     .title("Select Scan Region")
-    .inner_size(1920.0, 1080.0)
-    .position(0.0, 0.0)
     .decorations(false)
     .transparent(true)
     .always_on_top(true)
     .skip_taskbar(true)
     .resizable(false)
-    .visible(true)
+    .visible(false)
     .build()
     .map_err(|e| e.to_string())?;
+    // Builder position and size values are logical pixels. Apply explicit
+    // physical bounds after construction so 2560x1440 and scaled monitors are
+    // covered exactly, including monitors with negative desktop coordinates.
+    picker
+        .set_position(Position::Physical(monitor_position))
+        .map_err(|e| e.to_string())?;
+    picker
+        .set_size(Size::Physical(monitor_size))
+        .map_err(|e| e.to_string())?;
+    picker.show().map_err(|e| e.to_string())?;
+    picker.set_focus().map_err(|e| e.to_string())?;
     log_window_lifecycle(&app, "region_picker", "create", "set_region");
     log_window_lifecycle(&app, "region_picker", "show", "set_region");
 
@@ -923,6 +1000,7 @@ async fn scan_selected_region(
     if region.is_none() {
         return Ok(OcrScanResult {
             raw_text: "".to_string(),
+            normalized_text: None,
             normalized_value: None,
             confidence: None,
             scanned_at: chrono::Utc::now().to_rfc3339(),
@@ -942,6 +1020,7 @@ fn mock_ocr_scan(test_value: u32) -> Result<OcrScanResult, String> {
     let raw = test_value.to_string();
     Ok(OcrScanResult {
         raw_text: raw.clone(),
+        normalized_text: Some(raw.clone()),
         normalized_value: Some(test_value),
         confidence: Some(0.95),
         scanned_at: chrono::Utc::now().to_rfc3339(),
@@ -1009,14 +1088,54 @@ fn preprocess_for_ocr(img: image::DynamicImage, config: &OcrConfig) -> image::Dy
     result
 }
 
+fn normalize_ocr_signature_text(raw_text: &str) -> String {
+    raw_text
+        .chars()
+        .filter_map(|ch| match ch {
+            '0'..='9' => Some(ch),
+            'O' | 'o' | 'D' | 'Q' => Some('0'),
+            'I' | 'l' | '|' | '!' => Some('1'),
+            'Z' | 'z' => Some('2'),
+            'S' | 's' => Some('5'),
+            'G' | 'g' => Some('6'),
+            'B' => Some('8'),
+            _ => None,
+        })
+        .collect()
+}
+
+fn build_ocr_attempts(config: &OcrConfig) -> Vec<OcrConfig> {
+    let mut attempts = vec![config.clone()];
+
+    let mut psm8 = config.clone();
+    psm8.psm = 8;
+    if !attempts.contains(&psm8) {
+        attempts.push(psm8);
+    }
+
+    let mut relaxed = config.clone();
+    relaxed.psm = 8;
+    relaxed.threshold_enabled = false;
+    if !attempts.contains(&relaxed) {
+        attempts.push(relaxed.clone());
+    }
+
+    let mut inverted = relaxed.clone();
+    inverted.invert = !config.invert;
+    if !attempts.contains(&inverted) {
+        attempts.push(inverted);
+    }
+
+    attempts
+}
+
 /// Run OCR on the preprocessed crop using external tesseract (swappable backend).
 fn run_tesseract_ocr(
     preprocessed: &image::DynamicImage,
     config: &OcrConfig,
     app: &tauri::AppHandle,
 ) -> Result<String, String> {
-    let debug_dir = get_debug_dir(app)?;
-    let ocr_dir = debug_dir.join("ocr");
+    let ocr_dir = std::env::temp_dir().join("siglock").join("ocr");
     std::fs::create_dir_all(&ocr_dir).map_err(|e| e.to_string())?;
 
     let input_path = ocr_dir.join("ocr_input.png");
@@ -1040,7 +1159,9 @@ fn run_tesseract_ocr(
         cmd.arg("-c").arg("tessedit_char_whitelist=0123456789");
     }
 
-    let output = cmd.output().map_err(|e| {
+    let output_result = cmd.output();
+    let _ = std::fs::remove_file(&input_path);
+    let output = output_result.map_err(|e| {
         format!(
             "Failed to execute tesseract (is it installed and in PATH?): {}",
             e
@@ -1066,100 +1187,101 @@ fn perform_real_ocr_scan(
 ) -> Result<OcrScanResult, String> {
     let scanned_at = chrono::Utc::now().to_rfc3339();
 
-    let screens = screenshots::Screen::all().map_err(|e| e.to_string())?;
+    // Capture directly into memory. Persist only the temporary preprocessed image
+    // required by the external Tesseract process.
+    let captured_image = capture_scan_region(&region)?;
+    let capture_width = captured_image.width();
+    let capture_height = captured_image.height();
+    let rgba = image::RgbaImage::from_raw(capture_width, capture_height, captured_image.into_raw())
+        .ok_or_else(|| "Failed to prepare captured crop for OCR.".to_string())?;
+    let dynamic = image::DynamicImage::ImageRgba8(rgba);
+    println!(
+        "[SigLock] OCR scan region x={} y={} width={} height={} crop={}x{}",
+        region.x, region.y, region.width, region.height, capture_width, capture_height
+    );
 
-    let mut best_screen = &screens[0];
-    let mut best_overlap = 0i64;
+    let mut final_raw_text = String::new();
+    let mut final_normalized_text: Option<String> = None;
+    let mut final_normalized_value: Option<u32> = None;
+    let mut last_error: Option<String> = None;
 
-    for screen in &screens {
-        let di = &screen.display_info;
-        let overlap = calculate_overlap(
-            region.x,
-            region.y,
-            region.width as i32,
-            region.height as i32,
-            di,
+    for (index, attempt) in build_ocr_attempts(&config).into_iter().enumerate() {
+        let preprocessed = preprocess_for_ocr(dynamic.clone(), &attempt);
+        let raw_text = match run_tesseract_ocr(&preprocessed, &attempt, app) {
+            Ok(text) => text,
+            Err(e) => {
+                if e.to_lowercase().contains("tesseract")
+                    && (e.to_lowercase().contains("not found")
+                        || e.to_lowercase().contains("program not found"))
+                {
+                    return Ok(OcrScanResult {
+                        raw_text: String::new(),
+                        normalized_text: None,
+                        normalized_value: None,
+                        confidence: None,
+                        scanned_at,
+                        error: Some("Tesseract not found. Please install Tesseract and ensure it is in your PATH (or in the common Program Files location).".to_string()),
+                        raw_crop_path: None,
+                        preprocessed_path: None,
+                        capture_width: Some(capture_width),
+                        capture_height: Some(capture_height),
+                    });
+                }
+                last_error = Some(e);
+                continue;
+            }
+        };
+
+        let normalized_text = normalize_ocr_signature_text(&raw_text);
+        let normalized_value = normalized_text.parse::<u32>().ok();
+        println!(
+            "[SigLock] OCR attempt {} psm={} threshold={} invert={} raw='{}' normalized='{}'",
+            index + 1,
+            attempt.psm,
+            attempt.threshold_enabled,
+            attempt.invert,
+            raw_text,
+            normalized_text
         );
-        if overlap > best_overlap {
-            best_overlap = overlap;
-            best_screen = screen;
+
+        if final_raw_text.is_empty() {
+            final_raw_text = raw_text.clone();
+        }
+        if final_normalized_text.is_none() && !normalized_text.is_empty() {
+            final_normalized_text = Some(normalized_text.clone());
+        }
+        if let Some(value) = normalized_value {
+            final_raw_text = raw_text;
+            final_normalized_text = Some(normalized_text);
+            final_normalized_value = Some(value);
+            break;
         }
     }
 
-    // Capture and save raw crop (for debug + Capture Test button)
-    let captured_image = best_screen
-        .capture_area(region.x, region.y, region.width, region.height)
-        .map_err(|e| format!("Screen capture failed: {}", e))?;
+    if final_raw_text.is_empty() {
+        final_raw_text = String::new();
+    }
 
-    let debug_dir = get_debug_dir(app)?;
-    let captures_dir = debug_dir.join("captures");
-    std::fs::create_dir_all(&captures_dir).ok();
-
-    let raw_path = captures_dir.join("last_capture.png");
-    captured_image.save(&raw_path).map_err(|e| e.to_string())?;
-
-    // Load for preprocessing
-    let dynamic = image::open(&raw_path)
-        .map_err(|e| format!("Failed to load captured crop for OCR: {}", e))?;
-
-    // Preprocess using config
-    let preprocessed = preprocess_for_ocr(dynamic, &config);
-
-    // Save preprocessed debug image (latest only)
-    let preprocessed_path = captures_dir.join("last_preprocessed.png");
-    preprocessed.save(&preprocessed_path).ok(); // best effort
-
-    // Run OCR with config
-    let raw_text_result = run_tesseract_ocr(&preprocessed, &config, app);
-
-    let raw_text = match raw_text_result {
-        Ok(text) => text,
-        Err(e) => {
-            // Special handling for missing Tesseract - return graceful error instead of failing the command
-            if e.to_lowercase().contains("tesseract")
-                && (e.to_lowercase().contains("not found")
-                    || e.to_lowercase().contains("program not found"))
-            {
-                return Ok(OcrScanResult {
-                    raw_text: String::new(),
-                    normalized_value: None,
-                    confidence: None,
-                    scanned_at,
-                    error: Some("Tesseract not found. Please install Tesseract and ensure it is in your PATH (or in the common Program Files location).".to_string()),
-                    raw_crop_path: Some(raw_path.to_string_lossy().to_string()),
-                    preprocessed_path: Some(preprocessed_path.to_string_lossy().to_string()),
-                    capture_width: Some(region.width),
-                    capture_height: Some(region.height),
-                });
-            }
-            return Err(e);
-        }
-    };
-
-    // Normalize
-    let normalized: String = raw_text.chars().filter(|c| c.is_ascii_digit()).collect();
-    let normalized_value = if normalized.is_empty() {
-        None
-    } else {
-        normalized.parse::<u32>().ok()
-    };
-
-    let error = if normalized_value.is_none() {
-        Some(format!("OCR returned no valid number. Raw: '{}'", raw_text))
-    } else {
-        None
-    };
+    let error =
+        if final_normalized_value.is_none() {
+            Some(last_error.unwrap_or_else(|| {
+                format!("OCR returned no valid number. Raw: '{}'", final_raw_text)
+            }))
+        } else {
+            None
+        };
 
     Ok(OcrScanResult {
-        raw_text,
-        normalized_value,
+        raw_text: final_raw_text,
+        normalized_text: final_normalized_text,
+        normalized_value: final_normalized_value,
         confidence: None,
         scanned_at,
         error,
-        raw_crop_path: Some(raw_path.to_string_lossy().to_string()),
-        preprocessed_path: Some(preprocessed_path.to_string_lossy().to_string()),
-        capture_width: Some(region.width),
-        capture_height: Some(region.height),
+        raw_crop_path: None,
+        preprocessed_path: None,
+        capture_width: Some(capture_width),
+        capture_height: Some(capture_height),
     })
 }
 
@@ -1188,13 +1310,83 @@ fn calculate_overlap(
     w * h
 }
 
+fn local_capture_coordinates(
+    region: &ScanRegion,
+    display_x: i32,
+    display_y: i32,
+    display_width: u32,
+    display_height: u32,
+) -> Option<(i32, i32)> {
+    let region_right = i64::from(region.x) + i64::from(region.width);
+    let region_bottom = i64::from(region.y) + i64::from(region.height);
+    let display_right = i64::from(display_x) + i64::from(display_width);
+    let display_bottom = i64::from(display_y) + i64::from(display_height);
+    if region.x < display_x
+        || region.y < display_y
+        || region_right > display_right
+        || region_bottom > display_bottom
+    {
+        return None;
+    }
+    Some((region.x - display_x, region.y - display_y))
+}
+
+fn capture_scan_region(region: &ScanRegion) -> Result<screenshots::image::RgbaImage, String> {
+    validate_scan_region(region)?;
+    let screens =
+        screenshots::Screen::all().map_err(|e| format!("Failed to enumerate screens: {}", e))?;
+    let screen = screens
+        .iter()
+        .max_by_key(|screen| {
+            calculate_overlap(
+                region.x,
+                region.y,
+                region.width as i32,
+                region.height as i32,
+                &screen.display_info,
+            )
+        })
+        .ok_or_else(|| "No display is available for capture.".to_string())?;
+    let display = &screen.display_info;
+    let (local_x, local_y) = local_capture_coordinates(
+        region,
+        display.x,
+        display.y,
+        display.width,
+        display.height,
+    )
+    .ok_or_else(|| {
+        format!(
+            "Saved region ({}, {} {}x{}) is not fully inside one connected monitor. Set the region again on the monitor you want to scan.",
+            region.x, region.y, region.width, region.height
+        )
+    })?;
+
+    println!(
+        "[SigLock] capture display id={} origin=({}, {}) scale={} local=({}, {}) size={}x{}",
+        display.id,
+        display.x,
+        display.y,
+        display.scale_factor,
+        local_x,
+        local_y,
+        region.width,
+        region.height
+    );
+
+    #[cfg(windows)]
+    let capture =
+        screen.capture_area_ignore_area_check(local_x, local_y, region.width, region.height);
+    #[cfg(not(windows))]
+    let capture = screen.capture_area(local_x, local_y, region.width, region.height);
+
+    capture.map_err(|e| format!("Screen capture failed: {}", e))
+}
+
 // ==================== Real Region Capture (using screenshots crate) ====================
 
 #[tauri::command]
-async fn capture_region_preview(
-    state: State<'_, AppState>,
-    app: tauri::AppHandle,
-) -> Result<CaptureResult, String> {
+async fn capture_region_preview(state: State<'_, AppState>) -> Result<CaptureResult, String> {
     let region = {
         let s = state.lock().unwrap();
         s.region
@@ -1215,71 +1407,31 @@ async fn capture_region_preview(
         });
     }
 
-    let screens =
-        screenshots::Screen::all().map_err(|e| format!("Failed to enumerate screens: {}", e))?;
-
-    // Find the screen that contains (or is closest to) the region top-left
-    let mut best_screen = &screens[0];
-    let mut best_overlap = 0i64;
-
-    for screen in &screens {
-        let di = &screen.display_info;
-        let screen_left = di.x;
-        let screen_top = di.y;
-        let screen_right = screen_left + di.width as i32;
-        let screen_bottom = screen_top + di.height as i32;
-
-        let reg_left = region.x;
-        let reg_top = region.y;
-        let reg_right = reg_left + region.width as i32;
-        let reg_bottom = reg_top + region.height as i32;
-
-        let overlap_left = reg_left.max(screen_left);
-        let overlap_top = reg_top.max(screen_top);
-        let overlap_right = reg_right.min(screen_right);
-        let overlap_bottom = reg_bottom.min(screen_bottom);
-
-        let overlap_w = (overlap_right - overlap_left).max(0) as i64;
-        let overlap_h = (overlap_bottom - overlap_top).max(0) as i64;
-        let overlap = overlap_w * overlap_h;
-
-        if overlap > best_overlap {
-            best_overlap = overlap;
-            best_screen = screen;
-        }
-    }
-
-    // Attempt capture on the best screen
-    let capture_result = best_screen.capture_area(region.x, region.y, region.width, region.height);
+    let capture_result = capture_scan_region(&region);
 
     match capture_result {
-        Ok(image) => {
-            // Save using the centralized debug directory (release-friendly)
-            let captures_dir = get_debug_dir(&app)?.join("captures");
-            std::fs::create_dir_all(&captures_dir).map_err(|e| e.to_string())?;
+        Ok(captured_image) => {
+            // Encode the preview in memory; previews never create debug capture files.
+            let width = captured_image.width();
+            let height = captured_image.height();
+            let rgba = image::RgbaImage::from_raw(width, height, captured_image.into_raw())
+                .ok_or_else(|| "Failed to prepare capture preview.".to_string())?;
+            let dynamic = image::DynamicImage::ImageRgba8(rgba);
+            let mut encoded = Cursor::new(Vec::new());
+            dynamic
+                .write_to(&mut encoded, image::ImageFormat::Png)
+                .map_err(|e| format!("Failed to encode capture preview: {}", e))?;
 
-            let file_path = captures_dir.join("last_capture.png");
-            image
-                .save(&file_path)
-                .map_err(|e| format!("Failed to save capture: {}", e))?;
-
-            println!("[Capture] Saved raw crop to: {}", file_path.display());
-
-            // Generate base64 data URL for reliable preview (preferred for debug)
-            // Read the file we just saved — most reliable across image crate versions
-            let preview_data_url = match std::fs::read(&file_path) {
-                Ok(bytes) => Some(format!(
-                    "data:image/png;base64,{}",
-                    general_purpose::STANDARD.encode(&bytes)
-                )),
-                Err(_) => None,
-            };
+            let preview_data_url = Some(format!(
+                "data:image/png;base64,{}",
+                general_purpose::STANDARD.encode(encoded.into_inner())
+            ));
 
             Ok(CaptureResult {
                 success: true,
-                width: image.width(),
-                height: image.height(),
-                image_path: Some(file_path.to_string_lossy().to_string()),
+                width,
+                height,
+                image_path: None,
                 captured_at: chrono::Utc::now().to_rfc3339(),
                 error: None,
                 preview_data_url,
@@ -1440,7 +1592,10 @@ fn start_scan_mouse_hook(_app: tauri::AppHandle) {}
 
 #[cfg(test)]
 mod tests {
-    use super::{clamp_scan_interval, scan_mouse_button};
+    use super::{
+        clamp_scan_interval, local_capture_coordinates, scan_mouse_button,
+        write_native_settings_file, NativeSettings, ScanRegion,
+    };
     #[cfg(windows)]
     use super::{mouse_button_from_message, WM_MBUTTONDOWN, WM_XBUTTONDOWN};
 
@@ -1451,6 +1606,84 @@ mod tests {
         assert_eq!(clamp_scan_interval(3000), 3000);
         assert_eq!(clamp_scan_interval(4000), 4000);
         assert_eq!(clamp_scan_interval(30000), 4000);
+    }
+
+    #[test]
+    fn capture_coordinates_are_relative_to_the_selected_monitor() {
+        let secondary_region = ScanRegion {
+            x: 2700,
+            y: 120,
+            width: 320,
+            height: 90,
+        };
+        assert_eq!(
+            local_capture_coordinates(&secondary_region, 2560, 0, 2560, 1440),
+            Some((140, 120))
+        );
+
+        let left_monitor_region = ScanRegion {
+            x: -1800,
+            y: 40,
+            width: 240,
+            height: 70,
+        };
+        assert_eq!(
+            local_capture_coordinates(&left_monitor_region, -1920, 0, 1920, 1080),
+            Some((120, 40))
+        );
+    }
+
+    #[test]
+    fn capture_region_must_stay_inside_one_monitor() {
+        let spanning_region = ScanRegion {
+            x: 2500,
+            y: 100,
+            width: 200,
+            height: 80,
+        };
+        assert_eq!(
+            local_capture_coordinates(&spanning_region, 0, 0, 2560, 1440),
+            None
+        );
+    }
+
+    #[test]
+    fn native_settings_replace_an_existing_region_file() {
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "siglock-native-settings-{}-{}.json",
+            std::process::id(),
+            unique
+        ));
+        let first = NativeSettings {
+            region: Some(ScanRegion {
+                x: 10,
+                y: 20,
+                width: 200,
+                height: 50,
+            }),
+            overlay_position: Some((80, 120)),
+        };
+        let second = NativeSettings {
+            region: Some(ScanRegion {
+                x: 2700,
+                y: 140,
+                width: 300,
+                height: 70,
+            }),
+            overlay_position: Some((80, 120)),
+        };
+
+        write_native_settings_file(&path, &first).unwrap();
+        write_native_settings_file(&path, &second).unwrap();
+        let persisted: NativeSettings =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(persisted, second);
+
+        let _ = std::fs::remove_file(path);
     }
 
     #[test]
@@ -1475,6 +1708,7 @@ mod tests {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let state: AppState = Arc::new(Mutex::new(default_state()));
+    let native_settings: NativeSettingsState = Arc::new(Mutex::new(NativeSettings::default()));
     let timer_controller: ActiveScanControllerState =
         Arc::new(Mutex::new(ActiveScanController::default()));
 
@@ -1485,6 +1719,7 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(state.clone())
+        .manage(native_settings.clone())
         .manage(timer_controller.clone())
         .invoke_handler(tauri::generate_handler![
             match_signature,
@@ -1509,18 +1744,23 @@ pub fn run() {
             check_tesseract
         ])
         .setup(move |app| {
-            let native_settings = load_native_settings(&app.handle());
+            let loaded_native_settings = load_native_settings(&app.handle());
             log_window_lifecycle(&app.handle(), "main", "create", "startup");
             log_window_lifecycle(&app.handle(), "main", "show", "startup");
+            {
+                let mut cache = native_settings.lock().unwrap();
+                *cache = loaded_native_settings.clone();
+            }
             if let Ok(mut current_state) = state.lock() {
-                current_state.region = native_settings.region.clone();
+                current_state.region = loaded_native_settings.region.clone();
             }
             if let Some(overlay) = app.get_webview_window("overlay") {
                 log_window_lifecycle(&app.handle(), "overlay", "create", "startup");
                 log_window_lifecycle(&app.handle(), "overlay", "show", "startup");
                 let _ = overlay.set_always_on_top(true);
                 let _ = overlay.set_ignore_cursor_events(true);
-                let position = safe_overlay_position(&overlay, native_settings.overlay_position);
+                let position =
+                    safe_overlay_position(&overlay, loaded_native_settings.overlay_position);
                 let _ = overlay.set_position(Position::Physical(position));
                 log_window_lifecycle(&app.handle(), "overlay", "set_position", "startup");
             }
@@ -1545,12 +1785,23 @@ pub fn run() {
             }
             if window.label() == "overlay" {
                 if let WindowEvent::Moved(position) = event {
-                    let _ = save_overlay_position(&window.app_handle(), *position);
+                    let native_settings: State<'_, NativeSettingsState> =
+                        window.app_handle().state();
+                    let _ = save_overlay_position(
+                        &window.app_handle(),
+                        native_settings.inner(),
+                        *position,
+                    );
                 }
             }
             if window.label() == "region_picker" {
                 if let WindowEvent::Destroyed = event {
-                    log_window_lifecycle(&window.app_handle(), "region_picker", "close", "set_region");
+                    log_window_lifecycle(
+                        &window.app_handle(),
+                        "region_picker",
+                        "close",
+                        "set_region",
+                    );
                 }
             }
         })

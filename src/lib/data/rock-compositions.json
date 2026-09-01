@@ -1,0 +1,458 @@
+{
+  "schemaVersion": 2,
+  "source": "Scintel normalized mining contract: api/mining/material_sources.json",
+  "profiles": [
+    {
+      "primaryMaterial": "Agricium",
+      "sourceMaterial": "Agricium",
+      "primaryMaterialId": "d61d6c33-e428-4014-9326-0b06034de16a",
+      "systems": [
+        "Pyro",
+        "Stanton"
+      ],
+      "traces": [
+        {
+          "materialId": "9bd0e34c-2b34-42a3-b41d-381088ff6fed",
+          "material": "Aslarite",
+          "percentRange": [
+            2,
+            5
+          ]
+        },
+        {
+          "materialId": "7b9055e5-6d62-44dd-a725-a31d838301eb",
+          "material": "Titanium",
+          "percentRange": [
+            2,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "primaryMaterial": "Aluminium",
+      "sourceMaterial": "Aluminum",
+      "primaryMaterialId": "3776294d-5689-41f2-b03d-e8fcd17ede6a",
+      "systems": [
+        "Nyx",
+        "Pyro",
+        "Stanton"
+      ],
+      "traces": [
+        {
+          "materialId": "b471b96c-efbb-4342-90de-cfa087604d8e",
+          "material": "Corundum",
+          "percentRange": [
+            5,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "primaryMaterial": "Aslarite",
+      "sourceMaterial": "Aslarite",
+      "primaryMaterialId": "9bd0e34c-2b34-42a3-b41d-381088ff6fed",
+      "systems": [
+        "Pyro",
+        "Stanton"
+      ],
+      "traces": [
+        {
+          "materialId": "d61d6c33-e428-4014-9326-0b06034de16a",
+          "material": "Agricium",
+          "percentRange": [
+            2,
+            5
+          ]
+        },
+        {
+          "materialId": "7b9055e5-6d62-44dd-a725-a31d838301eb",
+          "material": "Titanium",
+          "percentRange": [
+            2,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "primaryMaterial": "Beryl",
+      "sourceMaterial": "Beryl",
+      "primaryMaterialId": "cad02f99-292c-4ee4-93cc-a73868f11ddb",
+      "systems": [
+        "Stanton"
+      ],
+      "traces": []
+    },
+    {
+      "primaryMaterial": "Bexalite",
+      "sourceMaterial": "Bexalite",
+      "primaryMaterialId": "bexalite",
+      "systems": [
+        "Nyx",
+        "Pyro",
+        "Stanton"
+      ],
+      "traces": [
+        {
+          "materialId": "07f6158a-6494-4b7c-9dd0-bbaab7362137",
+          "material": "Borase",
+          "percentRange": [
+            2,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "primaryMaterial": "Borase",
+      "sourceMaterial": "Borase",
+      "primaryMaterialId": "07f6158a-6494-4b7c-9dd0-bbaab7362137",
+      "systems": [
+        "Pyro",
+        "Stanton"
+      ],
+      "traces": []
+    },
+    {
+      "primaryMaterial": "Copper",
+      "sourceMaterial": "Copper",
+      "primaryMaterialId": "ee12edc1-a2c3-4202-909d-9b729a050a3f",
+      "systems": [
+        "Pyro",
+        "Stanton"
+      ],
+      "traces": [
+        {
+          "materialId": "16b426e2-7ce1-4fb4-8b34-4d8617dd6a97",
+          "material": "Tin",
+          "percentRange": [
+            5,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "primaryMaterial": "Corundum",
+      "sourceMaterial": "Corundum",
+      "primaryMaterialId": "b471b96c-efbb-4342-90de-cfa087604d8e",
+      "systems": [
+        "Pyro",
+        "Stanton"
+      ],
+      "traces": [
+        {
+          "materialId": "3776294d-5689-41f2-b03d-e8fcd17ede6a",
+          "material": "Aluminum",
+          "percentRange": [
+            5,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "primaryMaterial": "Gold",
+      "sourceMaterial": "Gold",
+      "primaryMaterialId": "gold",
+      "systems": [
+        "Pyro",
+        "Stanton"
+      ],
+      "traces": [
+        {
+          "materialId": "07f6158a-6494-4b7c-9dd0-bbaab7362137",
+          "material": "Borase",
+          "percentRange": [
+            2,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "primaryMaterial": "Heph",
+      "sourceMaterial": "Hephaestanite",
+      "primaryMaterialId": "hephaestanite",
+      "systems": [
+        "Pyro",
+        "Stanton"
+      ],
+      "traces": [
+        {
+          "materialId": "1d35c0bc-9142-42ff-8a83-0ec68d69a128",
+          "material": "Quartz",
+          "percentRange": [
+            2,
+            5
+          ]
+        },
+        {
+          "materialId": "219e8523-b953-4517-812a-0fb2eb023209",
+          "material": "Silicon",
+          "percentRange": [
+            2,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "primaryMaterial": "Ice",
+      "sourceMaterial": "Raw Ice",
+      "primaryMaterialId": "rawice",
+      "systems": [
+        "Nyx",
+        "Pyro",
+        "Stanton"
+      ],
+      "traces": []
+    },
+    {
+      "primaryMaterial": "Iron",
+      "sourceMaterial": "Iron",
+      "primaryMaterialId": "05708bae-1cb1-4e63-bb95-ec7f4a3ef430",
+      "systems": [
+        "Nyx",
+        "Pyro",
+        "Stanton"
+      ],
+      "traces": []
+    },
+    {
+      "primaryMaterial": "Laranite",
+      "sourceMaterial": "Laranite",
+      "primaryMaterialId": "8375a8d8-1627-4d35-ae91-6f39b373c3ad",
+      "systems": [
+        "Pyro",
+        "Stanton"
+      ],
+      "traces": [
+        {
+          "materialId": "8f6a7e06-934d-4339-a0a2-75420b81369a",
+          "material": "Tungsten",
+          "percentRange": [
+            5,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "primaryMaterial": "Lindinium",
+      "sourceMaterial": "Lindinium",
+      "primaryMaterialId": "1ec31863-26a8-446e-9805-448bb50253ed",
+      "systems": [
+        "Nyx"
+      ],
+      "traces": [
+        {
+          "materialId": "8f6a7e06-934d-4339-a0a2-75420b81369a",
+          "material": "Tungsten",
+          "percentRange": [
+            5,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "primaryMaterial": "Ouratite",
+      "sourceMaterial": "Ouratite",
+      "primaryMaterialId": "8723956e-e947-4b84-9dcb-b2c6137895ab",
+      "systems": [
+        "Stanton"
+      ],
+      "traces": [
+        {
+          "materialId": "d61d6c33-e428-4014-9326-0b06034de16a",
+          "material": "Agricium",
+          "percentRange": [
+            5,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "primaryMaterial": "Quantanium",
+      "sourceMaterial": "Quantanium",
+      "primaryMaterialId": "quantanium",
+      "systems": [
+        "Stanton"
+      ],
+      "traces": [
+        {
+          "materialId": "cad02f99-292c-4ee4-93cc-a73868f11ddb",
+          "material": "Beryl",
+          "percentRange": [
+            5,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "primaryMaterial": "Quartz",
+      "sourceMaterial": "Quartz",
+      "primaryMaterialId": "1d35c0bc-9142-42ff-8a83-0ec68d69a128",
+      "systems": [
+        "Pyro",
+        "Stanton"
+      ],
+      "traces": [
+        {
+          "materialId": "219e8523-b953-4517-812a-0fb2eb023209",
+          "material": "Silicon",
+          "percentRange": [
+            2,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "primaryMaterial": "Riccite",
+      "sourceMaterial": "Riccite",
+      "primaryMaterialId": "905e9623-5e74-4a92-9cb1-72203ed8baad",
+      "systems": [
+        "Pyro"
+      ],
+      "traces": [
+        {
+          "materialId": "8375a8d8-1627-4d35-ae91-6f39b373c3ad",
+          "material": "Laranite",
+          "percentRange": [
+            5,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "primaryMaterial": "Savrillium",
+      "sourceMaterial": "Savrilium",
+      "primaryMaterialId": "6426f04e-2f7d-4c8e-a615-64aa582eaa31",
+      "systems": [
+        "Nyx"
+      ],
+      "traces": []
+    },
+    {
+      "primaryMaterial": "Silicon",
+      "sourceMaterial": "Silicon",
+      "primaryMaterialId": "219e8523-b953-4517-812a-0fb2eb023209",
+      "systems": [
+        "Pyro",
+        "Stanton"
+      ],
+      "traces": []
+    },
+    {
+      "primaryMaterial": "Stileron",
+      "sourceMaterial": "Stileron",
+      "primaryMaterialId": "9498a080-84c0-41f4-b88f-71942c60c43f",
+      "systems": [
+        "Pyro"
+      ],
+      "traces": [
+        {
+          "materialId": "8893c670-f9f7-48df-a05b-e85764994256",
+          "material": "Taranite",
+          "percentRange": [
+            5,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "primaryMaterial": "Taranite",
+      "sourceMaterial": "Taranite",
+      "primaryMaterialId": "8893c670-f9f7-48df-a05b-e85764994256",
+      "systems": [
+        "Pyro",
+        "Stanton"
+      ],
+      "traces": []
+    },
+    {
+      "primaryMaterial": "Tin",
+      "sourceMaterial": "Tin",
+      "primaryMaterialId": "16b426e2-7ce1-4fb4-8b34-4d8617dd6a97",
+      "systems": [
+        "Pyro",
+        "Stanton"
+      ],
+      "traces": [
+        {
+          "materialId": "ee12edc1-a2c3-4202-909d-9b729a050a3f",
+          "material": "Copper",
+          "percentRange": [
+            5,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "primaryMaterial": "Titanium",
+      "sourceMaterial": "Titanium",
+      "primaryMaterialId": "7b9055e5-6d62-44dd-a725-a31d838301eb",
+      "systems": [
+        "Pyro",
+        "Stanton"
+      ],
+      "traces": [
+        {
+          "materialId": "d61d6c33-e428-4014-9326-0b06034de16a",
+          "material": "Agricium",
+          "percentRange": [
+            2,
+            5
+          ]
+        },
+        {
+          "materialId": "9bd0e34c-2b34-42a3-b41d-381088ff6fed",
+          "material": "Aslarite",
+          "percentRange": [
+            2,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "primaryMaterial": "Torite",
+      "sourceMaterial": "Torite",
+      "primaryMaterialId": "d0b10af3-e0f3-4bc3-b2d9-737dbb7846cf",
+      "systems": [
+        "Nyx",
+        "Pyro",
+        "Stanton"
+      ],
+      "traces": []
+    },
+    {
+      "primaryMaterial": "Tungsten",
+      "sourceMaterial": "Tungsten",
+      "primaryMaterialId": "8f6a7e06-934d-4339-a0a2-75420b81369a",
+      "systems": [
+        "Pyro",
+        "Stanton"
+      ],
+      "traces": [
+        {
+          "materialId": "8375a8d8-1627-4d35-ae91-6f39b373c3ad",
+          "material": "Laranite",
+          "percentRange": [
+            5,
+            10
+          ]
+        }
+      ]
+    }
+  ]
+}
