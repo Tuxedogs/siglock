@@ -9,7 +9,8 @@
   import { relaunch } from '@tauri-apps/plugin-process';
   import { check, type Update } from '@tauri-apps/plugin-updater';
   import { dev } from '$app/environment';
-  import { findNearestSignature, matchObservedValue, type MatchResult } from '$lib/data/signatures';
+  import { findNearestSignature, getSignatures, matchObservedValue, type MatchResult } from '$lib/data/signatures';
+  import { getMinableReference, locationLabel, materialValidAtLocation } from '$lib/data/materialLocations';
   import {
     resolveScanResult,
     type CompositionEntry,
@@ -23,6 +24,7 @@
   type Trigger = 'Manual' | 'Active';
   type ScanStatus = 'matched' | 'no match' | 'invalid' | 'failed' | 'skipped';
   type ShortcutAction = 'manual' | 'auto';
+  type AppPage = 'dashboard' | 'regions' | 'minables' | 'materials' | 'overlay' | 'settings';
   type ShipId = 'golem' | 'prospector' | 'mole';
   type ScanRegion = { x: number; y: number; width: number; height: number };
   type ShipProfileSnapshot = {
@@ -73,6 +75,8 @@
     detailLabel?: string;
     repeatCount: number;
     updatedAt: string;
+    watched: boolean;
+    detected: boolean;
   };
   type LastAcceptedScan = {
     key: string;
@@ -153,6 +157,8 @@
     shipSource: null, playerHandle: null, lastLineAt: null,
   });
   let gameLogPathInput = $state('');
+  let currentPage = $state<AppPage>('dashboard');
+  let minableSearch = $state('');
 
   function isValidRegion(region: unknown): region is ScanRegion {
     if (!region || typeof region !== 'object') return false;
@@ -189,6 +195,31 @@
 
   function materialLabel(material: string): string {
     return material;
+  }
+
+  function isWatched(material: string) {
+    const key = normalizeMaterial(material);
+    return settings.watchedMaterials.some((item) => normalizeMaterial(item) === key);
+  }
+
+  function toggleWatch(material: string) {
+    settings.watchedMaterials = isWatched(material)
+      ? settings.watchedMaterials.filter((item) => normalizeMaterial(item) !== normalizeMaterial(material))
+      : [...settings.watchedMaterials, material];
+    overlayMatches = overlayMatches.map((match) => ({ ...match, watched: isWatched(match.material) }));
+    void publishOverlayMatches();
+    persistSettings();
+  }
+
+  function visibleMinables() {
+    const query = minableSearch.trim().toLowerCase();
+    return getMinableReference()
+      .filter((row) => !query || row.material.toLowerCase().includes(query) || row.locations.some((location) => location.includes(query)))
+      .sort((a, b) => {
+        const location = gameLogStatus.currentLocation;
+        const validDelta = Number(materialValidAtLocation(b.material, location)) - Number(materialValidAtLocation(a.material, location));
+        return validDelta || a.material.localeCompare(b.material);
+      });
   }
 
   function formatCompositionNumber(value: number) {
@@ -228,6 +259,8 @@
       detailLabel: String(primary.expected),
       repeatCount: (existing?.repeatCount ?? 0) + 1,
       updatedAt,
+      watched: isWatched(primary.material),
+      detected: true,
     };
     overlayMatches = [next, ...overlayMatches.filter((item) => item !== existing && item.rockCount > 0)].slice(0, 3);
     void publishOverlayMatches();
@@ -247,6 +280,8 @@
       detailLabel,
       repeatCount: 1,
       updatedAt,
+      watched: false,
+      detected: false,
     }, ...overlayMatches.filter((item) => item.rockCount > 0)].slice(0, 3);
     void publishOverlayMatches();
   }
@@ -928,6 +963,15 @@
     void refreshCapturePreview();
   }
 
+  function navigatePage(page: AppPage) {
+    if (page === 'settings') {
+      openSettingsPane();
+      return;
+    }
+    currentPage = page;
+    if (page === 'regions') void refreshCapturePreview();
+  }
+
   function closeSettingsPane() {
     settingsOpen = false;
   }
@@ -1176,6 +1220,16 @@
     </div>
   </header>
 
+  <nav class="app-nav" aria-label="Primary navigation">
+    {#each [
+      ['dashboard', 'Dashboard'], ['regions', 'Regions'], ['minables', 'Minables'],
+      ['materials', 'Materials'], ['overlay', 'Overlay'], ['settings', 'Settings'],
+    ] as item}
+      <button class:active={currentPage === item[0] || (item[0] === 'settings' && settingsOpen)} onclick={() => navigatePage(item[0] as AppPage)}>{item[1]}</button>
+    {/each}
+    <span class="nav-telemetry"><i class:live={gameLogStatus.health === 'monitoring'}></i>{gameLogStatus.channel ?? 'LOG OFFLINE'}</span>
+  </nav>
+
   <nav class="system-filter" aria-label="Signature system filter">
     <span>Ship</span>
     {#each ['golem', 'prospector', 'mole'] as ship}
@@ -1185,6 +1239,9 @@
         onclick={() => switchShip(ship as ShipId)}
       >{shipLabel(ship as ShipId)}</button>
     {/each}
+    {#if gameLogStatus.detectedShip}
+      <span class="ship-evidence" title="Game.log evidence only; the selected profile remains manual">LOG {shipLabel(gameLogStatus.detectedShip)}</span>
+    {/if}
     <i aria-hidden="true"></i>
     <span>System</span>
     {#each ['All', 'Stanton', 'Pyro', 'Nyx'] as system}
@@ -1192,6 +1249,7 @@
     {/each}
   </nav>
 
+  {#if currentPage === 'dashboard'}
   <section class="status-strip" aria-label="Session status">
     <div class="status-card {regionSummary().tone} region-card">
       <div><small>Region</small><strong>{regionSummary().value}</strong><span>{regionSummary().detail}</span></div>
@@ -1201,7 +1259,61 @@
     <div class="status-card {gameLogStatus.currentLocation ? 'good' : 'neutral'}"><small>Location</small><strong>{gameLogStatus.currentLocation ? gameLogStatus.currentLocation[0].toUpperCase() + gameLogStatus.currentLocation.slice(1) : 'Unknown'}</strong><span>{gameLogStatus.currentLocation ? `${gameLogStatus.locationConfidence} confidence` : 'Waiting for strong log evidence'}</span></div>
     <div class="status-card {lastScanSummaryCard().tone}"><small>Last</small><strong>{lastScanSummaryCard().value}</strong><span>{lastScanSummaryCard().detail}</span></div>
   </section>
+  {:else if currentPage === 'regions'}
+    <section class="workspace-page regions-workspace">
+      <header class="workspace-heading"><div><small>Capture geometry</small><h1>{shipLabel(activeShip)} region</h1></div><span class="eyebrow">{regionSummary().value}</span></header>
+      <div class="region-layout">
+        <section class="instrument-panel region-instrument">
+          <div class="instrument-title"><span>Saved region</span><b>{captureRegion ? `${captureRegion.width} × ${captureRegion.height}` : 'Not configured'}</b></div>
+          <div class="region-readout">
+            {#if captureRegion}
+              <dl><div><dt>X</dt><dd>{captureRegion.x}</dd></div><div><dt>Y</dt><dd>{captureRegion.y}</dd></div><div><dt>Width</dt><dd>{captureRegion.width}</dd></div><div><dt>Height</dt><dd>{captureRegion.height}</dd></div></dl>
+            {:else}<p>Select the scan-number area for this ship profile.</p>{/if}
+          </div>
+          <div class="button-row"><button class="primary" onclick={setRegion}>{captureRegion ? 'Redraw region' : 'Set region'}</button><button onclick={clearRegion} disabled={!captureRegion}>Clear</button><button onclick={() => refreshCapturePreview(true)} disabled={!captureRegion}>Refresh preview</button></div>
+        </section>
+        <section class="instrument-panel preview-instrument">
+          <div class="instrument-title"><span>Live crop</span><b>{capturePreviewError ?? 'OCR input'}</b></div>
+          {#if capturePreviewUrl}<img class="capture-preview large" src={capturePreviewUrl} alt="Live preview of the active ship capture region" />{:else}<div class="preview-empty">{captureRegion ? 'Refresh to inspect the current crop.' : 'No region stored for this profile.'}</div>{/if}
+        </section>
+      </div>
+    </section>
+  {:else if currentPage === 'minables'}
+    <section class="workspace-page">
+      <header class="workspace-heading"><div><small>Operational reference</small><h1>Minables</h1></div><span class="eyebrow">{gameLogStatus.currentLocation ? locationLabel(gameLogStatus.currentLocation) : 'Location unknown'}</span></header>
+      <div class="table-toolbar"><input aria-label="Search minables" placeholder="Filter material or location" bind:value={minableSearch} /><span>{visibleMinables().length} materials · {settings.watchedMaterials.length} watched</span></div>
+      <div class="data-table minables-table" role="table" aria-label="Minable location reference">
+        <div class="table-head" role="row"><span>Material</span><span>Known locations</span><span>Here</span><span>Watch</span></div>
+        {#each visibleMinables() as row}
+          <div class:valid-here={!!gameLogStatus.currentLocation && materialValidAtLocation(row.material, gameLogStatus.currentLocation)} class="table-row" role="row">
+            <strong>{row.material}</strong><span>{row.locations.map(locationLabel).join(' · ')}</span>
+            <span class="validity">{gameLogStatus.currentLocation ? (materialValidAtLocation(row.material, gameLogStatus.currentLocation) ? 'VALID' : 'OUT') : '—'}</span>
+            <button class:watched={isWatched(row.material)} class="watch-action" aria-label={`${isWatched(row.material) ? 'Unwatch' : 'Watch'} ${row.material}`} onclick={() => toggleWatch(row.material)}><i></i>{isWatched(row.material) ? 'Watched' : 'Watch'}</button>
+          </div>
+        {/each}
+      </div>
+    </section>
+  {:else if currentPage === 'materials'}
+    <section class="workspace-page">
+      <header class="workspace-heading"><div><small>Signature library</small><h1>Materials</h1></div><span class="eyebrow">{getSignatures().materials.length} profiles</span></header>
+      <div class="data-table materials-table" role="table" aria-label="Material signatures">
+        <div class="table-head" role="row"><span>Material</span><span>Class</span><span>Base signature</span><span>Range</span></div>
+        {#each getSignatures().materials as material}
+          <div class="table-row" role="row"><strong>{material.materialName}</strong><span>{material.category ?? 'Mineable'}</span><span class="mono">{material.signatures[0]?.value ?? '—'}</span><span>{material.signatures.length} rock count{material.signatures.length === 1 ? '' : 's'}</span></div>
+        {/each}
+      </div>
+    </section>
+  {:else if currentPage === 'overlay'}
+    <section class="workspace-page overlay-workspace">
+      <header class="workspace-heading"><div><small>HUD augmentation</small><h1>Overlay</h1></div><span class="eyebrow">{overlayVisible ? 'Visible' : 'Hidden'}</span></header>
+      <div class="overlay-config-grid">
+        <section class="instrument-panel"><div class="instrument-title"><span>Positioning</span><b>{shipLabel(activeShip)} profile</b></div><div class="button-row"><button class:active={overlaySetupMode} onclick={toggleOverlaySetupMode}>{overlaySetupMode ? 'Lock position' : 'Unlock position'}</button><button onclick={resetOverlayPosition}>Reset</button><button onclick={toggleOverlay}>{overlayVisible ? 'Hide' : 'Show'}</button></div></section>
+        <section class="instrument-panel hud-preview-panel"><div class="instrument-title"><span>HUD preview</span><b>Minimal mode</b></div><div class="hud-preview"><header><strong>SIGLOCK</strong><span><i class:online={activeScanOn}></i>AUTO</span></header><p>Hadinite</p><p>Aphorite <i class="watch-demo"></i></p><p>Dolivine</p></div></section>
+      </div>
+    </section>
+  {/if}
 
+  {#if currentPage === 'dashboard'}
   <section class="panel finds-panel">
     <div class="section-title">
       <h2>Current Finds</h2>
@@ -1212,6 +1324,7 @@
         {#each currentFinds().slice(0, 3) as match}
           <div class="find-card">
             <strong>{materialLabel(match.material)}</strong>
+            {#if isWatched(match.material)}<i class="find-watch-dot" title="Watched material"></i>{/if}
             <span>{match.rockCount} rocks{match.valueLabel ? ` | ${match.valueLabel}` : ''}</span>
             {#if settings.showComposition && match.compositionProfile?.entries.length}
               <small>Trace materials</small>
@@ -1265,6 +1378,7 @@
       {/if}
     </div>
   </section>
+  {/if}
 
   {#if settingsOpen}
     <div class="settings-backdrop" role="presentation" onclick={closeSettingsPane}></div>

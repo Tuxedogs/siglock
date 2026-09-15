@@ -21,6 +21,7 @@ export interface SigLockSettings {
   includeFpsRocResults: boolean;
   onlyShowSolvedResults: boolean;
   selectedSystemFilter: SystemFilter;
+  watchedMaterials: string[];
 }
 
 export const DEFAULT_SETTINGS: SigLockSettings = {
@@ -42,6 +43,7 @@ export const DEFAULT_SETTINGS: SigLockSettings = {
   includeFpsRocResults: true,
   onlyShowSolvedResults: false,
   selectedSystemFilter: 'All',
+  watchedMaterials: [],
 };
 
 let store: Store | null = null;
@@ -90,6 +92,9 @@ export function sanitizeSettings(value: unknown): SigLockSettings {
     selectedSystemFilter: ['All', 'Stanton', 'Pyro', 'Nyx'].includes(raw.selectedSystemFilter ?? '')
       ? raw.selectedSystemFilter as SystemFilter
       : DEFAULT_SETTINGS.selectedSystemFilter,
+    watchedMaterials: Array.isArray(raw.watchedMaterials)
+      ? [...new Set(raw.watchedMaterials.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).map((item) => item.trim()))].slice(0, 64)
+      : DEFAULT_SETTINGS.watchedMaterials,
   };
 }
 

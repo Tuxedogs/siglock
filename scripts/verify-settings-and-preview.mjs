@@ -32,6 +32,9 @@ for (const oldLabel of [
 
 assert.match(settings, /includeFpsRocResults:\s*true/);
 assert.match(settings, /typeof raw\.includeFpsRocResults === 'boolean'/);
+assert.match(settings, /watchedMaterials:\s*\[\]/);
+assert.match(settings, /Array\.isArray\(raw\.watchedMaterials\)/);
+assert.match(settings, /new Set\(raw\.watchedMaterials/);
 assert.match(matcher, /includeFpsRoc\?: boolean/);
 assert.match(matcher, /\['fps', 'vehicle'\]\.includes/);
 
@@ -53,5 +56,7 @@ assert.match(rust, /OpenOptions::new\(\)[\s\S]*?truncate\(true\)[\s\S]*?sync_all
 assert.match(picker, /innerPosition\(\)/);
 assert.match(picker, /scaleFactor\(\)/);
 assert.match(picker, /Math\.round\(x \* pickerScaleFactor\)/);
+assert.match(page, /function toggleWatch\(material: string\)/);
+assert.match(page, /watched: isWatched\(primary\.material\)/);
 
 console.log('Settings and capture preview acceptance checks passed.');
