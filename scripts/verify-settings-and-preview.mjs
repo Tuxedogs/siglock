@@ -3,8 +3,9 @@ import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
 
-const [page, picker, settings, matcher, rust] = await Promise.all([
+const [page, overlay, picker, settings, matcher, rust] = await Promise.all([
   read('../src/routes/+page.svelte'),
+  read('../src/routes/overlay/+page.svelte'),
   read('../src/routes/region-picker/+page.svelte'),
   read('../src/lib/settings.ts'),
   read('../src/lib/data/signatures.ts'),
@@ -58,5 +59,10 @@ assert.match(picker, /scaleFactor\(\)/);
 assert.match(picker, /Math\.round\(x \* pickerScaleFactor\)/);
 assert.match(page, /function toggleWatch\(material: string\)/);
 assert.match(page, /watched: isWatched\(primary\.material\)/);
+assert.match(overlay, /<strong>SIGLOCK<\/strong>/);
+assert.match(overlay, /class:pulsing=\{match\.detected\} class="watch-dot"/);
+assert.match(overlay, /@keyframes watch-pulse/);
+assert.ok(!overlay.includes('class:pulsing={match.detected} class="match-item"'));
+assert.ok(!overlay.includes('Current Location'));
 
 console.log('Settings and capture preview acceptance checks passed.');
