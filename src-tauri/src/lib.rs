@@ -1,5 +1,11 @@
+mod game_log;
+
 use base64::engine::general_purpose;
 use base64::Engine;
+use game_log::{
+    candidate_logs, discover_game_log, start_monitor, stop_monitor, DiscoveryResult,
+    GameLogController, GameLogControllerState, GameLogStatus, GameLogStatusState,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs::OpenOptions;
@@ -631,7 +637,9 @@ fn save_region(
 ) -> Result<(), String> {
     let mut cache = native_settings.lock().unwrap();
     if !cache.persistence_ready {
-        return Err("Native settings were not safely loaded; refusing to replace them.".to_string());
+        return Err(
+            "Native settings were not safely loaded; refusing to replace them.".to_string(),
+        );
     }
     let mut next_settings = cache.value.clone();
     next_settings.active_profile_mut().scan_region = region.clone();
@@ -657,7 +665,8 @@ fn save_overlay_position(
     position: PhysicalPosition<i32>,
 ) -> Result<(), String> {
     let mut cache = native_settings.lock().unwrap();
-    let Some(next_settings) = settings_with_overlay_position(&cache, (position.x, position.y)) else {
+    let Some(next_settings) = settings_with_overlay_position(&cache, (position.x, position.y))
+    else {
         return Ok(());
     };
     save_native_settings(app, &next_settings)?;
@@ -740,6 +749,8 @@ fn request_shutdown_once(app: &tauri::AppHandle, source: &str) {
 
     let controller: State<'_, ActiveScanControllerState> = app.state();
     stop_active_scan_timer(controller.inner().clone());
+    let game_log_controller: State<'_, GameLogControllerState> = app.state();
+    stop_monitor(game_log_controller.inner());
     log_window_lifecycle(app, "shortcuts", "unregister", "shutdown");
 
     let _ = app.global_shortcut().unregister_all();
@@ -765,6 +776,71 @@ fn mouse_button_from_message(message: u32, mouse_data: u32) -> u32 {
 }
 
 // ==================== Commands ====================
+
+#[tauri::command]
+fn get_game_log_status(state: State<'_, GameLogStatusState>) -> GameLogStatus {
+    state.lock().unwrap().clone()
+}
+
+#[tauri::command]
+fn configure_game_log_path(
+    path: String,
+    app: tauri::AppHandle,
+    native_settings: State<'_, NativeSettingsState>,
+    controller: State<'_, GameLogControllerState>,
+    status: State<'_, GameLogStatusState>,
+) -> Result<GameLogStatus, String> {
+    let requested = PathBuf::from(path.trim());
+    let selected = if requested.is_file() {
+        Some(requested.clone())
+    } else if requested.is_dir() && requested.join("Game.log").is_file() {
+        Some(requested.join("Game.log"))
+    } else if requested.is_dir() {
+        candidate_logs(std::slice::from_ref(&requested))
+            .into_iter()
+            .max_by_key(|candidate| candidate.metadata().and_then(|value| value.modified()).ok())
+    } else {
+        None
+    }
+    .filter(|candidate| {
+        candidate
+            .file_name()
+            .is_some_and(|name| name.to_string_lossy().eq_ignore_ascii_case("Game.log"))
+    })
+    .ok_or_else(|| "Choose a StarCitizen folder, channel folder, or Game.log file.".to_string())?;
+
+    {
+        let mut cache = native_settings.lock().unwrap();
+        if !cache.persistence_ready {
+            return Err("Native settings were not safely loaded; path was not saved.".to_string());
+        }
+        let mut next = cache.value.clone();
+        next.game_log_path = Some(selected.clone());
+        save_native_settings(&app, &next)?;
+        cache.value = next;
+    }
+    let root = selected
+        .parent()
+        .and_then(Path::parent)
+        .map(Path::to_path_buf)
+        .into_iter()
+        .collect();
+    start_monitor(
+        app,
+        controller.inner().clone(),
+        status.inner().clone(),
+        DiscoveryResult {
+            selected: Some(selected.clone()),
+            roots: root,
+        },
+    );
+    Ok(GameLogStatus {
+        path: Some(selected.clone()),
+        channel: game_log::channel_name(&selected),
+        health: "monitoring".to_string(),
+        ..GameLogStatus::default()
+    })
+}
 
 #[tauri::command]
 async fn toggle_overlay_visibility(
@@ -1017,7 +1093,9 @@ fn set_active_ship(
     let (region, overlay_position, configured_ships) = {
         let mut cache = native_settings.lock().unwrap();
         if !cache.persistence_ready {
-            return Err("Native settings were not safely loaded; refusing to replace them.".to_string());
+            return Err(
+                "Native settings were not safely loaded; refusing to replace them.".to_string(),
+            );
         }
         let mut next_settings = cache.value.clone();
         next_settings.active_ship = ship;
@@ -1792,7 +1870,7 @@ fn start_scan_mouse_hook(_app: tauri::AppHandle) {}
 #[cfg(test)]
 mod tests {
     use super::{
-        clamp_scan_interval, local_capture_coordinates, load_native_settings_path,
+        clamp_scan_interval, load_native_settings_path, local_capture_coordinates,
         parse_native_settings, scan_mouse_button, settings_with_overlay_position,
         write_native_settings_file, NativeSettings, NativeSettingsCache, ScanRegion, ShipId,
     };
@@ -1893,8 +1971,14 @@ mod tests {
         assert!(migrated);
         assert_eq!(settings.version, 2);
         assert_eq!(settings.active_ship, ShipId::Prospector);
-        assert_eq!(settings.active_profile().scan_region.as_ref().unwrap().x, 1247);
-        assert_eq!(settings.active_profile().overlay_position, Some((1424, 456)));
+        assert_eq!(
+            settings.active_profile().scan_region.as_ref().unwrap().x,
+            1247
+        );
+        assert_eq!(
+            settings.active_profile().overlay_position,
+            Some((1424, 456))
+        );
     }
 
     #[test]
@@ -1913,19 +1997,44 @@ mod tests {
             width: 220,
             height: 60,
         });
-        assert_eq!(settings.ship_profiles[&ShipId::Prospector].scan_region.as_ref().unwrap().x, 10);
-        assert_eq!(settings.ship_profiles[&ShipId::Mole].scan_region.as_ref().unwrap().x, 300);
+        assert_eq!(
+            settings.ship_profiles[&ShipId::Prospector]
+                .scan_region
+                .as_ref()
+                .unwrap()
+                .x,
+            10
+        );
+        assert_eq!(
+            settings.ship_profiles[&ShipId::Mole]
+                .scan_region
+                .as_ref()
+                .unwrap()
+                .x,
+            300
+        );
         assert!(settings.ship_profiles[&ShipId::Golem].scan_region.is_none());
     }
 
     #[test]
     fn passive_overlay_move_cannot_replace_region_before_hydration() {
-        let persisted_region = ScanRegion { x: 10, y: 20, width: 200, height: 50 };
+        let persisted_region = ScanRegion {
+            x: 10,
+            y: 20,
+            width: 200,
+            height: 50,
+        };
         let mut settings = NativeSettings::default();
         settings.active_profile_mut().scan_region = Some(persisted_region.clone());
-        let cache = NativeSettingsCache { value: settings.clone(), persistence_ready: false };
+        let cache = NativeSettingsCache {
+            value: settings.clone(),
+            persistence_ready: false,
+        };
         assert!(settings_with_overlay_position(&cache, (900, 700)).is_none());
-        assert_eq!(cache.value.active_profile().scan_region, Some(persisted_region));
+        assert_eq!(
+            cache.value.active_profile().scan_region,
+            Some(persisted_region)
+        );
     }
 
     #[test]
@@ -1936,9 +2045,14 @@ mod tests {
             .as_nanos();
         let path = std::env::temp_dir().join(format!(
             "siglock-native-settings-migration-{}-{}.json",
-            std::process::id(), unique
+            std::process::id(),
+            unique
         ));
-        std::fs::write(&path, r#"{"region":{"x":1,"y":2,"width":80,"height":24},"overlay_position":[3,4]}"#).unwrap();
+        std::fs::write(
+            &path,
+            r#"{"region":{"x":1,"y":2,"width":80,"height":24},"overlay_position":[3,4]}"#,
+        )
+        .unwrap();
         let (settings, migrated) = load_native_settings_path(&path).unwrap();
         assert!(migrated);
         write_native_settings_file(&path, &settings).unwrap();
@@ -1973,6 +2087,9 @@ pub fn run() {
     let native_settings: NativeSettingsState = Arc::new(Mutex::new(NativeSettingsCache::default()));
     let timer_controller: ActiveScanControllerState =
         Arc::new(Mutex::new(ActiveScanController::default()));
+    let game_log_controller: GameLogControllerState =
+        Arc::new(Mutex::new(GameLogController::default()));
+    let game_log_status: GameLogStatusState = Arc::new(Mutex::new(GameLogStatus::default()));
 
     tauri::Builder::default()
         .plugin(tauri_plugin_process::init())
@@ -1983,8 +2100,12 @@ pub fn run() {
         .manage(state.clone())
         .manage(native_settings.clone())
         .manage(timer_controller.clone())
+        .manage(game_log_controller.clone())
+        .manage(game_log_status.clone())
         .invoke_handler(tauri::generate_handler![
             match_signature,
+            get_game_log_status,
+            configure_game_log_path,
             minimize_main_window,
             request_app_shutdown,
             toggle_overlay_visibility,
@@ -2047,13 +2168,30 @@ pub fn run() {
                 current_state.active_ship = loaded_native_settings.active_ship;
                 current_state.region = loaded_native_settings.active_profile().scan_region.clone();
             }
+            let discovery = discover_game_log(loaded_native_settings.game_log_path.as_deref());
+            if persistence_ready && discovery.selected != loaded_native_settings.game_log_path {
+                let mut next_settings = loaded_native_settings.clone();
+                next_settings.game_log_path = discovery.selected.clone();
+                if save_native_settings(&app.handle(), &next_settings).is_ok() {
+                    let mut cache = native_settings.lock().unwrap();
+                    cache.value = next_settings;
+                }
+            }
+            start_monitor(
+                app.handle().clone(),
+                game_log_controller.clone(),
+                game_log_status.clone(),
+                discovery,
+            );
             if let Some(overlay) = app.get_webview_window("overlay") {
                 log_window_lifecycle(&app.handle(), "overlay", "create", "startup");
                 log_window_lifecycle(&app.handle(), "overlay", "show", "startup");
                 let _ = overlay.set_always_on_top(true);
                 let _ = overlay.set_ignore_cursor_events(true);
-                let position =
-                    safe_overlay_position(&overlay, loaded_native_settings.active_profile().overlay_position);
+                let position = safe_overlay_position(
+                    &overlay,
+                    loaded_native_settings.active_profile().overlay_position,
+                );
                 let _ = overlay.set_position(Position::Physical(position));
                 log_window_lifecycle(&app.handle(), "overlay", "set_position", "startup");
             }
