@@ -103,7 +103,7 @@
   });
 </script>
 
-{#if setupMode || displayedMatches.length}
+{#if setupMode || activeScanOn || displayedMatches.length}
 <div class="overlay-shell">
   {#if setupMode}
     <div class="setup-handle" data-tauri-drag-region>

@@ -45,7 +45,7 @@ const aliases: Record<string, string> = {
   pressurizedice: 'ice',
   quantainium: 'quantanium',
   rawice: 'ice',
-  savrilium: 'savrillium',
+  savrillium: 'savrilium',
 };
 
 export function canonicalMaterialKey(value: string): string {

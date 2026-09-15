@@ -54,6 +54,7 @@ pub type GameLogControllerState = Arc<Mutex<GameLogController>>;
 pub struct DiscoveryResult {
     pub selected: Option<PathBuf>,
     pub roots: Vec<PathBuf>,
+    pub pinned: bool,
 }
 
 fn valid_game_log(path: &Path) -> bool {
@@ -61,6 +62,11 @@ fn valid_game_log(path: &Path) -> bool {
         && path
             .file_name()
             .is_some_and(|name| name.to_string_lossy().eq_ignore_ascii_case("Game.log"))
+}
+
+fn named_game_log(path: &Path) -> bool {
+    path.file_name()
+        .is_some_and(|name| name.to_string_lossy().eq_ignore_ascii_case("Game.log"))
 }
 
 fn launcher_log_path() -> Option<PathBuf> {
@@ -127,7 +133,10 @@ fn modified_at(path: &Path) -> SystemTime {
 }
 
 pub fn discover_game_log(persisted: Option<&Path>) -> DiscoveryResult {
-    if let Some(path) = persisted.filter(|path| valid_game_log(path)) {
+    // Keep a configured Game.log even while Star Citizen has removed or is
+    // recreating it. The monitor will wait on the exact persisted path instead
+    // of silently forgetting the user's selection or switching channels.
+    if let Some(path) = persisted.filter(|path| named_game_log(path)) {
         return DiscoveryResult {
             selected: Some(path.to_path_buf()),
             roots: path
@@ -136,6 +145,7 @@ pub fn discover_game_log(persisted: Option<&Path>) -> DiscoveryResult {
                 .map(Path::to_path_buf)
                 .into_iter()
                 .collect(),
+            pinned: true,
         };
     }
 
@@ -148,7 +158,11 @@ pub fn discover_game_log(persisted: Option<&Path>) -> DiscoveryResult {
     let selected = candidate_logs(&roots)
         .into_iter()
         .max_by_key(|path| modified_at(path));
-    DiscoveryResult { selected, roots }
+    DiscoveryResult {
+        selected,
+        roots,
+        pinned: false,
+    }
 }
 
 pub fn channel_name(path: &Path) -> Option<String> {
@@ -330,6 +344,12 @@ struct TailCursor {
 }
 
 impl TailCursor {
+    fn reset(&mut self) {
+        self.offset = 0;
+        self.created = None;
+        self.pending.clear();
+    }
+
     fn reset_if_replaced(&mut self, metadata: &Metadata) {
         let created = metadata.created().ok();
         if metadata.len() < self.offset || (self.created.is_some() && created != self.created) {
@@ -340,7 +360,13 @@ impl TailCursor {
     }
 
     fn read_appended(&mut self, path: &Path) -> Result<Vec<String>, String> {
-        let mut file = File::open(path).map_err(|error| error.to_string())?;
+        let mut file = match File::open(path) {
+            Ok(file) => file,
+            Err(error) => {
+                self.reset();
+                return Err(error.to_string());
+            }
+        };
         let metadata = file.metadata().map_err(|error| error.to_string())?;
         self.reset_if_replaced(&metadata);
         file.seek(SeekFrom::Start(self.offset))
@@ -437,6 +463,10 @@ pub fn start_monitor(
             let mut changed = false;
             match cursor.read_appended(&path) {
                 Ok(lines) => {
+                    if classifier.status.health != "monitoring" {
+                        classifier.status.health = "monitoring".to_string();
+                        changed = true;
+                    }
                     if lines.is_empty() {
                         idle_ticks += 1;
                     } else {
@@ -447,15 +477,17 @@ pub fn start_monitor(
                     }
                 }
                 Err(_) => {
-                    classifier.status.health = "waiting".to_string();
-                    changed = true;
+                    if classifier.status.health != "waiting-for-file" {
+                        classifier.status.health = "waiting-for-file".to_string();
+                        changed = true;
+                    }
                     idle_ticks += 1;
                 }
             }
 
             // A channel switch leaves the old log in place. Compare only the known
             // direct channel folders after sustained idle time; never scan a drive.
-            if idle_ticks >= 30 {
+            if idle_ticks >= 30 && !discovery.pinned {
                 if let Some(recent) = candidate_logs(&discovery.roots)
                     .into_iter()
                     .max_by_key(|candidate| modified_at(candidate))
@@ -484,7 +516,7 @@ pub fn stop_monitor(controller: &GameLogControllerState) {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_location, LogClassifier, TailCursor};
+    use super::{discover_game_log, normalize_location, LogClassifier, TailCursor};
     use std::io::Write;
 
     #[test]
@@ -560,6 +592,25 @@ mod tests {
         assert_eq!(cursor.read_appended(&path).unwrap(), vec!["second"]);
         std::fs::write(&path, "new\n").unwrap();
         assert_eq!(cursor.read_appended(&path).unwrap(), vec!["new"]);
+        std::fs::remove_file(&path).unwrap();
+        assert!(cursor.read_appended(&path).is_err());
+        std::fs::write(&path, "replacement\n").unwrap();
+        assert_eq!(cursor.read_appended(&path).unwrap(), vec!["replacement"]);
         let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn persisted_game_log_path_survives_temporary_absence() {
+        let path = std::env::temp_dir()
+            .join(format!("siglock-missing-{}", std::process::id()))
+            .join("LIVE")
+            .join("Game.log");
+        let discovery = discover_game_log(Some(&path));
+        assert_eq!(discovery.selected.as_deref(), Some(path.as_path()));
+        assert!(discovery.pinned);
+        assert_eq!(
+            discovery.roots,
+            vec![path.parent().unwrap().parent().unwrap().to_path_buf()]
+        );
     }
 }

@@ -38,4 +38,10 @@ const iceProfile = compositions.profiles.find((profile) => profile.primaryMateri
 assert.equal(iceProfile.sourceMaterial, 'Raw Ice');
 assert.deepEqual(iceProfile.traces, []);
 
+const savrilium = signatures.find((entry) => entry.materialName === 'Savrilium');
+assert.ok(savrilium, 'Savrilium must use the user-facing spelling in the canonical signature inventory');
+assert.equal(savrilium.signatures[0].value, 3200);
+const savriliumProfile = compositions.profiles.find((profile) => profile.primaryMaterial === 'Savrilium');
+assert.equal(savriliumProfile?.sourceMaterial, 'Savrilium');
+
 console.log('Scintel trace-material composition acceptance checks passed.');

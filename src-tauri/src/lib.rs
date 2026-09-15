@@ -436,6 +436,8 @@ struct AppStateInner {
     region: Option<ScanRegion>,
     /// Ship profile whose region is currently active.
     active_ship: ShipId,
+    /// Stable id of the built-in or user-created OCR region currently used for scans.
+    active_region_id: String,
     /// Last observed signature and source
     last_value: Option<u32>,
     last_source: Option<String>,
@@ -474,6 +476,7 @@ fn default_state() -> AppStateInner {
         overlay_setup_mode: false,
         region: None,
         active_ship: ShipId::default(),
+        active_region_id: ShipId::default().id().to_string(),
         last_value: None,
         last_source: None,
         hotkey_show_hide: "Ctrl+Shift+M".to_string(),
@@ -501,11 +504,39 @@ impl ShipId {
     fn all() -> [Self; 3] {
         [Self::Golem, Self::Prospector, Self::Mole]
     }
+
+    fn id(self) -> &'static str {
+        match self {
+            Self::Golem => "golem",
+            Self::Prospector => "prospector",
+            Self::Mole => "mole",
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Golem => "Golem",
+            Self::Prospector => "Prospector",
+            Self::Mole => "MOLE",
+        }
+    }
+
+    fn from_id(value: &str) -> Option<Self> {
+        Self::all().into_iter().find(|ship| ship.id() == value)
+    }
 }
 
 #[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq, Eq)]
 #[serde(default, rename_all = "camelCase")]
 struct ShipProfile {
+    scan_region: Option<ScanRegion>,
+    overlay_position: Option<(i32, i32)>,
+}
+
+#[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq, Eq)]
+#[serde(default, rename_all = "camelCase")]
+struct CustomRegionProfile {
+    name: String,
     scan_region: Option<ScanRegion>,
     overlay_position: Option<(i32, i32)>,
 }
@@ -516,6 +547,8 @@ struct NativeSettings {
     version: u8,
     active_ship: ShipId,
     ship_profiles: BTreeMap<ShipId, ShipProfile>,
+    active_custom_region: Option<String>,
+    custom_regions: BTreeMap<String, CustomRegionProfile>,
     game_log_path: Option<PathBuf>,
 }
 
@@ -526,23 +559,77 @@ impl Default for NativeSettings {
             .map(|ship| (ship, ShipProfile::default()))
             .collect();
         Self {
-            version: 2,
+            version: 3,
             active_ship: ShipId::default(),
             ship_profiles,
+            active_custom_region: None,
+            custom_regions: BTreeMap::new(),
             game_log_path: None,
         }
     }
 }
 
 impl NativeSettings {
-    fn active_profile(&self) -> &ShipProfile {
+    fn active_ship_profile(&self) -> &ShipProfile {
         self.ship_profiles
             .get(&self.active_ship)
             .expect("default ship profiles are always populated")
     }
 
-    fn active_profile_mut(&mut self) -> &mut ShipProfile {
+    fn active_ship_profile_mut(&mut self) -> &mut ShipProfile {
         self.ship_profiles.entry(self.active_ship).or_default()
+    }
+
+    fn active_region_id(&self) -> String {
+        self.active_custom_region
+            .as_ref()
+            .filter(|id| self.custom_regions.contains_key(*id))
+            .cloned()
+            .unwrap_or_else(|| self.active_ship.id().to_string())
+    }
+
+    fn active_scan_region(&self) -> Option<&ScanRegion> {
+        if let Some(profile) = self
+            .active_custom_region
+            .as_ref()
+            .and_then(|id| self.custom_regions.get(id))
+        {
+            profile.scan_region.as_ref()
+        } else {
+            self.active_ship_profile().scan_region.as_ref()
+        }
+    }
+
+    fn set_active_scan_region(&mut self, region: Option<ScanRegion>) {
+        if let Some(profile) = self
+            .active_custom_region
+            .as_ref()
+            .and_then(|id| self.custom_regions.get_mut(id))
+        {
+            profile.scan_region = region;
+        } else {
+            self.active_ship_profile_mut().scan_region = region;
+        }
+    }
+
+    fn active_overlay_position(&self) -> Option<(i32, i32)> {
+        self.active_custom_region
+            .as_ref()
+            .and_then(|id| self.custom_regions.get(id))
+            .and_then(|profile| profile.overlay_position)
+            .or_else(|| self.active_ship_profile().overlay_position)
+    }
+
+    fn set_active_overlay_position(&mut self, position: (i32, i32)) {
+        if let Some(profile) = self
+            .active_custom_region
+            .as_ref()
+            .and_then(|id| self.custom_regions.get_mut(id))
+        {
+            profile.overlay_position = Some(position);
+        } else {
+            self.active_ship_profile_mut().overlay_position = Some(position);
+        }
     }
 }
 
@@ -577,14 +664,22 @@ fn parse_native_settings(value: &str) -> Result<(NativeSettings, bool), String> 
         for ship in ShipId::all() {
             settings.ship_profiles.entry(ship).or_default();
         }
-        settings.version = 2;
-        return Ok((settings, false));
+        let migrated = settings.version < 3;
+        if settings
+            .active_custom_region
+            .as_ref()
+            .is_some_and(|id| !settings.custom_regions.contains_key(id))
+        {
+            settings.active_custom_region = None;
+        }
+        settings.version = 3;
+        return Ok((settings, migrated));
     }
 
     let legacy: LegacyNativeSettings =
         serde_json::from_value(json).map_err(|error| error.to_string())?;
     let mut settings = NativeSettings::default();
-    let profile = settings.active_profile_mut();
+    let profile = settings.active_ship_profile_mut();
     profile.scan_region = legacy.region;
     profile.overlay_position = legacy.overlay_position;
     Ok((settings, true))
@@ -642,10 +737,10 @@ fn save_region(
         );
     }
     let mut next_settings = cache.value.clone();
-    next_settings.active_profile_mut().scan_region = region.clone();
+    next_settings.set_active_scan_region(region.clone());
     save_native_settings(app, &next_settings)?;
     let (persisted, _) = load_native_settings(app)?;
-    let saved_ok = persisted.active_profile().scan_region == region;
+    let saved_ok = persisted.active_scan_region() == region.as_ref();
     println!(
         "[SigLock] region persistence {} after save: {:?}",
         if saved_ok { "verified" } else { "FAILED" },
@@ -684,7 +779,7 @@ fn settings_with_overlay_position(
         return None;
     }
     let mut next_settings = cache.value.clone();
-    next_settings.active_profile_mut().overlay_position = Some(position);
+    next_settings.set_active_overlay_position(position);
     Some(next_settings)
 }
 
@@ -832,6 +927,7 @@ fn configure_game_log_path(
         DiscoveryResult {
             selected: Some(selected.clone()),
             roots: root,
+            pinned: true,
         },
     );
     Ok(GameLogStatus {
@@ -849,8 +945,9 @@ async fn toggle_overlay_visibility(
 ) -> Result<bool, String> {
     if let Some(window) = app.get_webview_window("overlay") {
         let currently_visible = window.is_visible().unwrap_or(false);
+        let active_scan_enabled = state.lock().unwrap().active_scan_enabled;
 
-        if currently_visible {
+        if currently_visible && !active_scan_enabled {
             window.hide().map_err(|e| e.to_string())?;
             log_window_lifecycle(&app, "overlay", "hide", "overlay_update");
         } else {
@@ -858,7 +955,9 @@ async fn toggle_overlay_visibility(
             window.show().map_err(|e| e.to_string())?;
             log_window_lifecycle(&app, "overlay", "show", "overlay_update");
         }
-        let visible = !currently_visible;
+        let visible = window
+            .is_visible()
+            .unwrap_or(active_scan_enabled || !currently_visible);
         state.lock().unwrap().overlay_visible = visible;
         let _ = app.emit("overlay-visibility-changed", visible);
         Ok(visible)
@@ -997,6 +1096,15 @@ async fn toggle_active_scan(
     let _ = app.emit("active-scan-toggled", enabled);
 
     if enabled {
+        if let Some(window) = app.get_webview_window("overlay") {
+            window
+                .set_always_on_top(true)
+                .map_err(|error| error.to_string())?;
+            window.show().map_err(|error| error.to_string())?;
+            state.lock().unwrap().overlay_visible = true;
+            let _ = app.emit("overlay-visibility-changed", true);
+            log_window_lifecycle(&app, "overlay", "show", "active_scan");
+        }
         if had_region {
             start_active_scan_timer(app.clone(), state.inner().clone(), interval);
             println!(
@@ -1044,6 +1152,7 @@ fn get_app_state(state: State<'_, AppState>) -> Result<serde_json::Value, String
         "overlay_setup_mode": s.overlay_setup_mode,
         "has_region": s.region.is_some(),
         "active_ship": s.active_ship,
+        "active_region_id": s.active_region_id,
         "scan_interval_ms": s.scan_interval_ms,
         "hotkeys": {
             "show_hide": s.hotkey_show_hide,
@@ -1055,71 +1164,107 @@ fn get_app_state(state: State<'_, AppState>) -> Result<serde_json::Value, String
 
 // ==================== Region Management (persisted) ====================
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
-struct ShipProfileSnapshot {
-    active_ship: ShipId,
+struct RegionProfileSnapshot {
+    id: String,
+    name: String,
+    built_in: bool,
     scan_region: Option<ScanRegion>,
-    configured_ships: Vec<ShipId>,
 }
 
-#[tauri::command]
-fn get_ship_profile(native_settings: State<'_, NativeSettingsState>) -> ShipProfileSnapshot {
-    let cache = native_settings.lock().unwrap();
-    ShipProfileSnapshot {
-        active_ship: cache.value.active_ship,
-        scan_region: cache.value.active_profile().scan_region.clone(),
-        configured_ships: ShipId::all()
-            .into_iter()
-            .filter(|ship| {
-                cache
-                    .value
-                    .ship_profiles
-                    .get(ship)
-                    .and_then(|profile| profile.scan_region.as_ref())
-                    .is_some()
-            })
-            .collect(),
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RegionProfilesSnapshot {
+    active_region_id: String,
+    profiles: Vec<RegionProfileSnapshot>,
+}
+
+fn region_profiles_snapshot(settings: &NativeSettings) -> RegionProfilesSnapshot {
+    let mut profiles = ShipId::all()
+        .into_iter()
+        .map(|ship| RegionProfileSnapshot {
+            id: ship.id().to_string(),
+            name: ship.label().to_string(),
+            built_in: true,
+            scan_region: settings
+                .ship_profiles
+                .get(&ship)
+                .and_then(|profile| profile.scan_region.clone()),
+        })
+        .collect::<Vec<_>>();
+    profiles.extend(
+        settings
+            .custom_regions
+            .iter()
+            .map(|(id, profile)| RegionProfileSnapshot {
+                id: id.clone(),
+                name: profile.name.clone(),
+                built_in: false,
+                scan_region: profile.scan_region.clone(),
+            }),
+    );
+    profiles[3..].sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    RegionProfilesSnapshot {
+        active_region_id: settings.active_region_id(),
+        profiles,
     }
 }
 
 #[tauri::command]
-fn set_active_ship(
-    ship: ShipId,
+fn get_region_profiles(native_settings: State<'_, NativeSettingsState>) -> RegionProfilesSnapshot {
+    region_profiles_snapshot(&native_settings.lock().unwrap().value)
+}
+
+fn apply_active_region(
+    settings: &mut NativeSettings,
+    region_id: &str,
+) -> Result<(Option<ScanRegion>, Option<(i32, i32)>), String> {
+    if let Some(ship) = ShipId::from_id(region_id) {
+        settings.active_ship = ship;
+        settings.active_custom_region = None;
+    } else if settings.custom_regions.contains_key(region_id) {
+        settings.active_custom_region = Some(region_id.to_string());
+    } else {
+        return Err("That OCR region no longer exists.".to_string());
+    }
+    Ok((
+        settings.active_scan_region().cloned(),
+        settings.active_overlay_position(),
+    ))
+}
+
+#[tauri::command]
+fn set_active_region(
+    region_id: String,
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     native_settings: State<'_, NativeSettingsState>,
-) -> Result<ShipProfileSnapshot, String> {
-    let (region, overlay_position, configured_ships) = {
+) -> Result<RegionProfilesSnapshot, String> {
+    let (region, overlay_position, snapshot) = {
         let mut cache = native_settings.lock().unwrap();
         if !cache.persistence_ready {
             return Err(
                 "Native settings were not safely loaded; refusing to replace them.".to_string(),
             );
         }
-        let mut next_settings = cache.value.clone();
-        next_settings.active_ship = ship;
-        let profile = next_settings.active_profile().clone();
-        save_native_settings(&app, &next_settings)?;
-        cache.value = next_settings;
-        let configured = ShipId::all()
-            .into_iter()
-            .filter(|candidate| {
-                cache
-                    .value
-                    .ship_profiles
-                    .get(candidate)
-                    .and_then(|value| value.scan_region.as_ref())
-                    .is_some()
-            })
-            .collect::<Vec<_>>();
-        (profile.scan_region, profile.overlay_position, configured)
+        let mut next = cache.value.clone();
+        let (region, overlay_position) = apply_active_region(&mut next, &region_id)?;
+        save_native_settings(&app, &next)?;
+        cache.value = next;
+        (
+            region,
+            overlay_position,
+            region_profiles_snapshot(&cache.value),
+        )
     };
-
     {
-        let mut app_state = state.lock().unwrap();
-        app_state.active_ship = ship;
-        app_state.region = region.clone();
+        let mut current = state.lock().unwrap();
+        current.active_region_id = snapshot.active_region_id.clone();
+        if let Some(ship) = ShipId::from_id(&snapshot.active_region_id) {
+            current.active_ship = ship;
+        }
+        current.region = region;
     }
     if let (Some(window), Some((x, y))) = (app.get_webview_window("overlay"), overlay_position) {
         let position = safe_overlay_position(&window, Some((x, y)));
@@ -1127,12 +1272,85 @@ fn set_active_ship(
             .set_position(Position::Physical(position))
             .map_err(|error| error.to_string())?;
     }
-    let _ = app.emit("ship-profile-changed", ship);
-    Ok(ShipProfileSnapshot {
-        active_ship: ship,
-        scan_region: region,
-        configured_ships,
-    })
+    let _ = app.emit("region-profile-changed", &snapshot.active_region_id);
+    Ok(snapshot)
+}
+
+#[tauri::command]
+fn create_region(
+    name: String,
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    native_settings: State<'_, NativeSettingsState>,
+) -> Result<RegionProfilesSnapshot, String> {
+    let name = name.trim();
+    if name.is_empty() || name.chars().count() > 40 {
+        return Err("Region names must contain 1 to 40 characters.".to_string());
+    }
+    let mut cache = native_settings.lock().unwrap();
+    if !cache.persistence_ready {
+        return Err("Native settings were not safely loaded; region was not created.".to_string());
+    }
+    if cache
+        .value
+        .custom_regions
+        .values()
+        .any(|profile| profile.name.eq_ignore_ascii_case(name))
+    {
+        return Err("A region with that name already exists.".to_string());
+    }
+    let mut id = format!("custom-{}", chrono::Utc::now().timestamp_millis());
+    while cache.value.custom_regions.contains_key(&id) {
+        id.push('x');
+    }
+    let mut next = cache.value.clone();
+    next.custom_regions.insert(
+        id.clone(),
+        CustomRegionProfile {
+            name: name.to_string(),
+            ..CustomRegionProfile::default()
+        },
+    );
+    next.active_custom_region = Some(id.clone());
+    save_native_settings(&app, &next)?;
+    cache.value = next;
+    let snapshot = region_profiles_snapshot(&cache.value);
+    let mut current = state.lock().unwrap();
+    current.active_region_id = id;
+    current.region = None;
+    Ok(snapshot)
+}
+
+#[tauri::command]
+fn delete_region(
+    region_id: String,
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    native_settings: State<'_, NativeSettingsState>,
+) -> Result<RegionProfilesSnapshot, String> {
+    if ShipId::from_id(&region_id).is_some() {
+        return Err("Built-in region presets cannot be deleted.".to_string());
+    }
+    let mut cache = native_settings.lock().unwrap();
+    if !cache.persistence_ready {
+        return Err("Native settings were not safely loaded; region was not deleted.".to_string());
+    }
+    let mut next = cache.value.clone();
+    if next.custom_regions.remove(&region_id).is_none() {
+        return Err("That OCR region no longer exists.".to_string());
+    }
+    if next.active_custom_region.as_deref() == Some(&region_id) {
+        next.active_custom_region = None;
+        next.active_ship = ShipId::Prospector;
+    }
+    save_native_settings(&app, &next)?;
+    cache.value = next;
+    let snapshot = region_profiles_snapshot(&cache.value);
+    let mut current = state.lock().unwrap();
+    current.active_ship = cache.value.active_ship;
+    current.active_region_id = snapshot.active_region_id.clone();
+    current.region = cache.value.active_scan_region().cloned();
+    Ok(snapshot)
 }
 
 #[tauri::command]
@@ -1144,8 +1362,14 @@ async fn set_crop_region(
 ) -> Result<(), String> {
     validate_scan_region(&region)?;
     save_region(&app, native_settings.inner(), Some(region.clone()))?;
-    let mut s = state.lock().unwrap();
-    s.region = Some(region);
+    let (active_scan_enabled, interval) = {
+        let mut s = state.lock().unwrap();
+        s.region = Some(region);
+        (s.active_scan_enabled, s.scan_interval_ms)
+    };
+    if active_scan_enabled {
+        start_active_scan_timer(app, state.inner().clone(), interval);
+    }
     Ok(())
 }
 
@@ -1210,18 +1434,18 @@ async fn open_region_picker(app: tauri::AppHandle) -> Result<(), String> {
         return Ok(());
     }
 
-    let monitor = app
-        .get_webview_window("main")
-        .and_then(|window| window.current_monitor().ok().flatten())
-        .or_else(|| app.primary_monitor().ok().flatten());
+    // Region coordinates are persisted as physical virtual-desktop pixels. Always
+    // anchor the picker to the Windows primary display so moving the main window
+    // cannot change the coordinate space used by existing or newly saved regions.
+    let monitor = app.primary_monitor().map_err(|error| error.to_string())?;
     let monitor_position = monitor
         .as_ref()
         .map(|value| value.position().to_owned())
-        .unwrap_or_else(|| PhysicalPosition::new(0, 0));
+        .ok_or_else(|| "Windows did not report a primary display.".to_string())?;
     let monitor_size = monitor
         .as_ref()
         .map(|value| value.size().to_owned())
-        .unwrap_or_else(|| tauri::PhysicalSize::new(1920, 1080));
+        .ok_or_else(|| "Windows did not report a primary display size.".to_string())?;
 
     let picker = tauri::WebviewWindowBuilder::new(
         &app,
@@ -1805,7 +2029,12 @@ fn register_default_hotkeys(app: &tauri::AppHandle) -> Result<(), Box<dyn std::e
         .on_shortcut(show_hide_shortcut, move |app, _shortcut, event| {
             if event.state() == ShortcutState::Pressed {
                 if let Some(window) = app.get_webview_window("overlay") {
-                    if window.is_visible().unwrap_or(false) {
+                    let active_scan_enabled = app
+                        .state::<AppState>()
+                        .lock()
+                        .map(|state| state.active_scan_enabled)
+                        .unwrap_or(false);
+                    if window.is_visible().unwrap_or(false) && !active_scan_enabled {
                         let _ = window.hide();
                         log_window_lifecycle(app, "overlay", "hide", "overlay_update");
                     } else {
@@ -1870,9 +2099,10 @@ fn start_scan_mouse_hook(_app: tauri::AppHandle) {}
 #[cfg(test)]
 mod tests {
     use super::{
-        clamp_scan_interval, load_native_settings_path, local_capture_coordinates,
-        parse_native_settings, scan_mouse_button, settings_with_overlay_position,
-        write_native_settings_file, NativeSettings, NativeSettingsCache, ScanRegion, ShipId,
+        apply_active_region, clamp_scan_interval, load_native_settings_path,
+        local_capture_coordinates, parse_native_settings, scan_mouse_button,
+        settings_with_overlay_position, write_native_settings_file, CustomRegionProfile,
+        NativeSettings, NativeSettingsCache, ScanRegion, ShipId,
     };
     #[cfg(windows)]
     use super::{mouse_button_from_message, WM_MBUTTONDOWN, WM_XBUTTONDOWN};
@@ -1937,15 +2167,15 @@ mod tests {
             unique
         ));
         let mut first = NativeSettings::default();
-        first.active_profile_mut().scan_region = Some(ScanRegion {
+        first.active_ship_profile_mut().scan_region = Some(ScanRegion {
             x: 10,
             y: 20,
             width: 200,
             height: 50,
         });
-        first.active_profile_mut().overlay_position = Some((80, 120));
+        first.active_ship_profile_mut().overlay_position = Some((80, 120));
         let mut second = first.clone();
-        second.active_profile_mut().scan_region = Some(ScanRegion {
+        second.active_ship_profile_mut().scan_region = Some(ScanRegion {
             x: 2700,
             y: 140,
             width: 300,
@@ -1969,14 +2199,19 @@ mod tests {
         }"#;
         let (settings, migrated) = parse_native_settings(legacy).unwrap();
         assert!(migrated);
-        assert_eq!(settings.version, 2);
+        assert_eq!(settings.version, 3);
         assert_eq!(settings.active_ship, ShipId::Prospector);
         assert_eq!(
-            settings.active_profile().scan_region.as_ref().unwrap().x,
+            settings
+                .active_ship_profile()
+                .scan_region
+                .as_ref()
+                .unwrap()
+                .x,
             1247
         );
         assert_eq!(
-            settings.active_profile().overlay_position,
+            settings.active_ship_profile().overlay_position,
             Some((1424, 456))
         );
     }
@@ -1984,14 +2219,14 @@ mod tests {
     #[test]
     fn each_ship_profile_retains_its_own_region() {
         let mut settings = NativeSettings::default();
-        settings.active_profile_mut().scan_region = Some(ScanRegion {
+        settings.active_ship_profile_mut().scan_region = Some(ScanRegion {
             x: 10,
             y: 20,
             width: 200,
             height: 50,
         });
         settings.active_ship = ShipId::Mole;
-        settings.active_profile_mut().scan_region = Some(ScanRegion {
+        settings.active_ship_profile_mut().scan_region = Some(ScanRegion {
             x: 300,
             y: 400,
             width: 220,
@@ -2017,6 +2252,53 @@ mod tests {
     }
 
     #[test]
+    fn custom_region_round_trips_and_can_be_selected() {
+        let region = ScanRegion {
+            x: 40,
+            y: 50,
+            width: 260,
+            height: 64,
+        };
+        let mut settings = NativeSettings::default();
+        settings.custom_regions.insert(
+            "custom-test".to_string(),
+            CustomRegionProfile {
+                name: "Mining HUD".to_string(),
+                scan_region: Some(region.clone()),
+                overlay_position: None,
+            },
+        );
+        let (selected, _) = apply_active_region(&mut settings, "custom-test").unwrap();
+        assert_eq!(selected, Some(region));
+
+        let encoded = serde_json::to_string(&settings).unwrap();
+        let (reloaded, migrated) = parse_native_settings(&encoded).unwrap();
+        assert!(!migrated);
+        assert_eq!(reloaded.active_region_id(), "custom-test");
+        assert_eq!(reloaded.custom_regions["custom-test"].name, "Mining HUD");
+    }
+
+    #[test]
+    fn deleting_active_custom_region_falls_back_without_touching_presets() {
+        let mut settings = NativeSettings::default();
+        settings.custom_regions.insert(
+            "custom-test".to_string(),
+            CustomRegionProfile {
+                name: "Temporary".to_string(),
+                ..CustomRegionProfile::default()
+            },
+        );
+        apply_active_region(&mut settings, "custom-test").unwrap();
+        settings.custom_regions.remove("custom-test");
+        settings.active_custom_region = None;
+        let encoded = serde_json::to_string(&settings).unwrap();
+        let (reloaded, _) = parse_native_settings(&encoded).unwrap();
+        assert_eq!(reloaded.active_region_id(), "prospector");
+        assert!(!reloaded.custom_regions.contains_key("custom-test"));
+        assert_eq!(reloaded.ship_profiles.len(), 3);
+    }
+
+    #[test]
     fn passive_overlay_move_cannot_replace_region_before_hydration() {
         let persisted_region = ScanRegion {
             x: 10,
@@ -2025,14 +2307,14 @@ mod tests {
             height: 50,
         };
         let mut settings = NativeSettings::default();
-        settings.active_profile_mut().scan_region = Some(persisted_region.clone());
+        settings.active_ship_profile_mut().scan_region = Some(persisted_region.clone());
         let cache = NativeSettingsCache {
             value: settings.clone(),
             persistence_ready: false,
         };
         assert!(settings_with_overlay_position(&cache, (900, 700)).is_none());
         assert_eq!(
-            cache.value.active_profile().scan_region,
+            cache.value.active_ship_profile().scan_region,
             Some(persisted_region)
         );
     }
@@ -2118,8 +2400,10 @@ pub fn run() {
             toggle_active_scan,
             set_scan_interval,
             get_app_state,
-            get_ship_profile,
-            set_active_ship,
+            get_region_profiles,
+            set_active_region,
+            create_region,
+            delete_region,
             set_crop_region,
             get_crop_region,
             clear_crop_region,
@@ -2166,7 +2450,8 @@ pub fn run() {
             }
             if let Ok(mut current_state) = state.lock() {
                 current_state.active_ship = loaded_native_settings.active_ship;
-                current_state.region = loaded_native_settings.active_profile().scan_region.clone();
+                current_state.active_region_id = loaded_native_settings.active_region_id();
+                current_state.region = loaded_native_settings.active_scan_region().cloned();
             }
             let discovery = discover_game_log(loaded_native_settings.game_log_path.as_deref());
             if persistence_ready && discovery.selected != loaded_native_settings.game_log_path {
@@ -2190,7 +2475,7 @@ pub fn run() {
                 let _ = overlay.set_ignore_cursor_events(true);
                 let position = safe_overlay_position(
                     &overlay,
-                    loaded_native_settings.active_profile().overlay_position,
+                    loaded_native_settings.active_overlay_position(),
                 );
                 let _ = overlay.set_position(Position::Physical(position));
                 log_window_lifecycle(&app.handle(), "overlay", "set_position", "startup");

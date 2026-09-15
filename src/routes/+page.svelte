@@ -9,7 +9,7 @@
   import { relaunch } from '@tauri-apps/plugin-process';
   import { check, type Update } from '@tauri-apps/plugin-updater';
   import { findNearestSignature, getSignatures, matchObservedValue, type MatchResult } from '$lib/data/signatures';
-  import { getMinableReference, locationLabel, materialValidAtLocation } from '$lib/data/materialLocations';
+  import { locationLabel, locationsForMaterial, materialValidAtLocation } from '$lib/data/materialLocations';
   import {
     resolveScanResult,
     type CompositionEntry,
@@ -23,13 +23,18 @@
   type Trigger = 'Manual' | 'Active';
   type ScanStatus = 'matched' | 'no match' | 'invalid' | 'failed' | 'skipped';
   type ShortcutAction = 'manual' | 'auto';
-  type AppPage = 'dashboard' | 'regions' | 'minables' | 'materials' | 'overlay' | 'settings';
+  type AppPage = 'dashboard' | 'regions' | 'minables' | 'overlay' | 'settings';
   type ShipId = 'golem' | 'prospector' | 'mole';
   type ScanRegion = { x: number; y: number; width: number; height: number };
-  type ShipProfileSnapshot = {
-    activeShip: ShipId;
+  type RegionProfile = {
+    id: string;
+    name: string;
+    builtIn: boolean;
     scanRegion: ScanRegion | null;
-    configuredShips: ShipId[];
+  };
+  type RegionProfilesSnapshot = {
+    activeRegionId: string;
+    profiles: RegionProfile[];
   };
   type GameLogStatus = {
     path: string | null;
@@ -110,8 +115,13 @@
   let matches = $state<MatchResult[]>([]);
   let history = $state<HistoryEntry[]>([]);
   let captureRegion = $state<ScanRegion | null>(null);
-  let activeShip = $state<ShipId>('prospector');
-  let configuredShips = $state<ShipId[]>([]);
+  let activeRegionId = $state('prospector');
+  let regionProfiles = $state<RegionProfile[]>([
+    { id: 'golem', name: 'Golem', builtIn: true, scanRegion: null },
+    { id: 'prospector', name: 'Prospector', builtIn: true, scanRegion: null },
+    { id: 'mole', name: 'MOLE', builtIn: true, scanRegion: null },
+  ]);
+  let newRegionName = $state('');
   let regionLoadComplete = $state(false);
   let activeScanOn = $state(false);
   let overlayVisible = $state(true);
@@ -195,6 +205,19 @@
     return material;
   }
 
+  function activeRegionProfile() {
+    return regionProfiles.find((profile) => profile.id === activeRegionId) ?? regionProfiles[0] ?? {
+      id: 'prospector', name: 'Prospector', builtIn: true, scanRegion: null,
+    };
+  }
+
+  function applyRegionSnapshot(snapshot: RegionProfilesSnapshot) {
+    activeRegionId = snapshot.activeRegionId;
+    regionProfiles = snapshot.profiles;
+    const region = activeRegionProfile().scanRegion;
+    captureRegion = isValidRegion(region) ? region : null;
+  }
+
   function isWatched(material: string) {
     const key = normalizeMaterial(material);
     return settings.watchedMaterials.some((item) => normalizeMaterial(item) === key);
@@ -211,13 +234,19 @@
 
   function visibleMinables() {
     const query = minableSearch.trim().toLowerCase();
-    return getMinableReference()
+    return getSignatures().materials
+      .map((material) => ({ ...material, material: material.materialName, locations: locationsForMaterial(material.materialName) }))
       .filter((row) => !query || row.material.toLowerCase().includes(query) || row.locations.some((location) => location.includes(query)))
       .sort((a, b) => {
         const location = gameLogStatus.currentLocation;
         const validDelta = Number(materialValidAtLocation(b.material, location)) - Number(materialValidAtLocation(a.material, location));
         return validDelta || a.material.localeCompare(b.material);
       });
+  }
+
+  function locationValidity(row: ReturnType<typeof visibleMinables>[number]) {
+    if (!gameLogStatus.currentLocation || !row.locations.length) return '—';
+    return materialValidAtLocation(row.material, gameLogStatus.currentLocation) ? 'VALID' : 'OUT';
   }
 
   function formatCompositionNumber(value: number) {
@@ -314,10 +343,7 @@
 
   async function loadSavedRegion(startup = false) {
     try {
-      const profile = await invoke<ShipProfileSnapshot>('get_ship_profile');
-      activeShip = profile.activeShip;
-      configuredShips = profile.configuredShips;
-      captureRegion = isValidRegion(profile.scanRegion) ? profile.scanRegion : null;
+      applyRegionSnapshot(await invoke<RegionProfilesSnapshot>('get_region_profiles'));
     } catch {
       captureRegion = null;
     } finally {
@@ -340,26 +366,42 @@
     }
   }
 
-  async function switchShip(ship: ShipId) {
-    if (ship === activeShip) return;
+  async function switchRegion(regionId: string) {
+    if (regionId === activeRegionId) return;
     try {
-      const profile = await invoke<ShipProfileSnapshot>('set_active_ship', { ship });
-      activeShip = profile.activeShip;
-      configuredShips = profile.configuredShips;
-      captureRegion = isValidRegion(profile.scanRegion) ? profile.scanRegion : null;
+      applyRegionSnapshot(await invoke<RegionProfilesSnapshot>('set_active_region', { regionId }));
       capturePreviewUrl = null;
       capturePreviewError = null;
       matches = [];
       scannerStatus = captureRegion
-        ? `${shipLabel(ship)} profile loaded`
-        : `${shipLabel(ship)} needs a capture region`;
+        ? `${activeRegionProfile().name} region loaded`
+        : `${activeRegionProfile().name} needs capture bounds`;
     } catch (error) {
-      scannerStatus = `Ship profile switch failed: ${String(error)}`;
+      scannerStatus = `Region switch failed: ${String(error)}`;
     }
   }
 
-  function shipLabel(ship: ShipId) {
-    return ship === 'mole' ? 'MOLE' : ship[0].toUpperCase() + ship.slice(1);
+  async function createCustomRegion() {
+    try {
+      applyRegionSnapshot(await invoke<RegionProfilesSnapshot>('create_region', { name: newRegionName }));
+      newRegionName = '';
+      capturePreviewUrl = null;
+      scannerStatus = `${activeRegionProfile().name} created; set its OCR bounds.`;
+    } catch (error) {
+      scannerStatus = `Region creation failed: ${String(error)}`;
+    }
+  }
+
+  async function deleteActiveRegion() {
+    const profile = activeRegionProfile();
+    if (!profile || profile.builtIn) return;
+    try {
+      applyRegionSnapshot(await invoke<RegionProfilesSnapshot>('delete_region', { regionId: profile.id }));
+      capturePreviewUrl = null;
+      scannerStatus = `${profile.name} deleted.`;
+    } catch (error) {
+      scannerStatus = `Region deletion failed: ${String(error)}`;
+    }
   }
 
   function skippedEntry(trigger: Trigger, material: string): Omit<HistoryEntry, 'id' | 'repeatCount'> {
@@ -805,12 +847,11 @@
       .reduce((total, entry) => total + entry.repeatCount, 0);
   }
 
-  function signatureRockCounts() {
-    return [...new Set(getSignatures().materials.flatMap((material) => material.signatures.map((entry) => entry.rockCount)))].sort((a, b) => a - b);
-  }
-
-  function signatureForRockCount(material: ReturnType<typeof getSignatures>['materials'][number], rockCount: number) {
-    return material.signatures.find((entry) => entry.rockCount === rockCount)?.value ?? '—';
+  function signatureSummary(material: ReturnType<typeof getSignatures>['materials'][number]) {
+    return material.signatures
+      .filter((entry) => entry.value != null)
+      .map((entry) => `${entry.rockCount}× ${entry.value}`)
+      .join(' · ');
   }
 
   function historyTitle(entry: HistoryEntry) {
@@ -948,7 +989,7 @@
   async function clearRegion() {
     await invoke('clear_crop_region');
     captureRegion = null;
-    configuredShips = configuredShips.filter((ship) => ship !== activeShip);
+    regionProfiles = regionProfiles.map((profile) => profile.id === activeRegionId ? { ...profile, scanRegion: null } : profile);
     capturePreviewUrl = null;
     capturePreviewError = null;
     regionLoadComplete = true;
@@ -1124,7 +1165,9 @@
     unlisteners.push(await listen<ScanRegion>('crop-region-updated', (event) => {
       if (isValidRegion(event.payload)) {
         captureRegion = event.payload;
-        if (!configuredShips.includes(activeShip)) configuredShips = [...configuredShips, activeShip];
+        regionProfiles = regionProfiles.map((profile) => profile.id === activeRegionId
+          ? { ...profile, scanRegion: event.payload }
+          : profile);
         regionLoadComplete = true;
         scannerStatus = 'Capture region saved';
         if (currentPage === 'regions' || currentPage === 'settings') void refreshCapturePreview();
@@ -1214,7 +1257,7 @@
     <nav aria-label="Primary navigation">
       {#each [
         ['dashboard', '⌂', 'Dashboard'], ['overlay', '▣', 'Overlay'], ['regions', '⌖', 'Regions'],
-        ['minables', '◈', 'Minables'], ['materials', '▤', 'Materials'], ['settings', '⚙', 'Settings'],
+        ['minables', '◈', 'Minables / Materials'], ['settings', '⚙', 'Settings'],
       ] as item}
         <button class:active={currentPage === item[0]} onclick={() => navigatePage(item[0] as AppPage)}>
           <span aria-hidden="true">{item[1]}</span>{item[2]}
@@ -1235,14 +1278,14 @@
       <button class="window-control close" aria-label="Close" title="Close" onclick={closeApp}>×</button>
     </header>
 
-    <section class="profile-bar" aria-label="Active ship profile">
-      <div class="profile-label"><span aria-hidden="true">✥</span><div><small>Active ship</small><strong>Profile</strong></div></div>
+    <section class="profile-bar" aria-label="Active OCR region">
+      <div class="profile-label"><span aria-hidden="true">✥</span><div><small>Active OCR</small><strong>Region</strong></div></div>
       <div class="ship-selector">
-        {#each ['golem', 'prospector', 'mole'] as ship}
-          <button class:active={activeShip === ship} class:configured={configuredShips.includes(ship as ShipId)} onclick={() => switchShip(ship as ShipId)}>{shipLabel(ship as ShipId)}</button>
+        {#each regionProfiles as profile}
+          <button class:active={activeRegionId === profile.id} class:configured={!!profile.scanRegion} onclick={() => switchRegion(profile.id)}>{profile.name}</button>
         {/each}
       </div>
-      <p>OCR regions and overlay position are saved per ship profile.</p>
+      <p>Built-in presets and custom OCR regions persist independently.</p>
       <nav class="system-selector" aria-label="Signature system filter">
         {#each ['All', 'Stanton', 'Pyro', 'Nyx'] as system}
           <button class:active={settings.selectedSystemFilter === system} onclick={() => setSystemFilter(system as SystemFilter)}>{system}</button>
@@ -1253,14 +1296,14 @@
   {#if currentPage === 'dashboard'}
   <section class="dashboard-grid">
     <article class="module region-module">
-      <header><div><small>OCR capture</small><h2>Region management</h2></div><button onclick={setRegion}>+ {captureRegion ? 'Redraw' : 'New region'}</button></header>
-      <p class="module-copy">Screen area scanned for {shipLabel(activeShip)} signatures.</p>
+      <header><div><small>OCR capture</small><h2>Region management</h2></div><button onclick={setRegion}>{captureRegion ? 'Redraw bounds' : 'Set bounds'}</button></header>
+      <p class="module-copy">Screen area scanned for {activeRegionProfile().name} signatures.</p>
       <div class:active={!!captureRegion} class="region-entry">
-        <i></i><div><strong>{shipLabel(activeShip)} signature readout</strong><span>{captureRegion ? `x ${captureRegion.x} · y ${captureRegion.y} · ${captureRegion.width} × ${captureRegion.height}` : 'No capture area configured'}</span></div><b>{captureRegion ? 'Active' : 'Missing'}</b>
+        <i></i><div><strong>{activeRegionProfile().name} signature readout</strong><span>{captureRegion ? `x ${captureRegion.x} · y ${captureRegion.y} · ${captureRegion.width} × ${captureRegion.height}` : 'No capture area configured'}</span></div><b>{captureRegion ? 'Active' : 'Missing'}</b>
       </div>
       <div class="profile-region-list">
-        {#each ['golem', 'prospector', 'mole'] as ship}
-          {#if ship !== activeShip}<div><i class:configured={configuredShips.includes(ship as ShipId)}></i><span>{shipLabel(ship as ShipId)} profile</span><b>{configuredShips.includes(ship as ShipId) ? 'Configured' : 'Not set'}</b></div>{/if}
+        {#each regionProfiles as profile}
+          {#if profile.id !== activeRegionId}<div><i class:configured={!!profile.scanRegion}></i><span>{profile.name}</span><b>{profile.scanRegion ? 'Configured' : 'Not set'}</b></div>{/if}
         {/each}
       </div>
       <footer><button onclick={setRegion} disabled={!captureRegion}>Edit</button><button onclick={() => refreshCapturePreview(true)} disabled={!captureRegion}>Capture preview</button><button onclick={clearRegion} disabled={!captureRegion}>Reset</button></footer>
@@ -1301,14 +1344,15 @@
   </section>
   {:else if currentPage === 'regions'}
     <section class="workspace-page regions-workspace">
-      <header class="workspace-heading"><div><small>Capture geometry</small><h1>{shipLabel(activeShip)} region</h1></div><span class="eyebrow">{regionSummary().value}</span></header>
+      <header class="workspace-heading"><div><small>Capture geometry</small><h1>{activeRegionProfile().name} region</h1></div><span class="eyebrow">{regionSummary().value}</span></header>
+      <div class="region-create-row"><input aria-label="New OCR region name" maxlength="40" placeholder="New region name" bind:value={newRegionName} /><button onclick={createCustomRegion} disabled={!newRegionName.trim()}>Add region</button><button class="danger-action" onclick={deleteActiveRegion} disabled={activeRegionProfile().builtIn}>Delete selected</button></div>
       <div class="region-layout">
         <section class="instrument-panel region-instrument">
           <div class="instrument-title"><span>Saved region</span><b>{captureRegion ? `${captureRegion.width} × ${captureRegion.height}` : 'Not configured'}</b></div>
           <div class="region-readout">
             {#if captureRegion}
               <dl><div><dt>X</dt><dd>{captureRegion.x}</dd></div><div><dt>Y</dt><dd>{captureRegion.y}</dd></div><div><dt>Width</dt><dd>{captureRegion.width}</dd></div><div><dt>Height</dt><dd>{captureRegion.height}</dd></div></dl>
-            {:else}<p>Select the scan-number area for this ship profile.</p>{/if}
+            {:else}<p>Select the scan-number area for this OCR region.</p>{/if}
           </div>
           <div class="button-row"><button class="primary" onclick={setRegion}>{captureRegion ? 'Redraw region' : 'Set region'}</button><button onclick={clearRegion} disabled={!captureRegion}>Clear</button><button onclick={() => refreshCapturePreview(true)} disabled={!captureRegion}>Refresh preview</button></div>
         </section>
@@ -1320,27 +1364,16 @@
     </section>
   {:else if currentPage === 'minables'}
     <section class="workspace-page">
-      <header class="workspace-heading"><div><small>Operational reference</small><h1>Minables</h1></div><span class="eyebrow">{gameLogStatus.currentLocation ? locationLabel(gameLogStatus.currentLocation) : 'Location unknown'}</span></header>
+      <header class="workspace-heading"><div><small>Canonical signature reference</small><h1>Minables / Materials</h1></div><span class="eyebrow">{gameLogStatus.currentLocation ? locationLabel(gameLogStatus.currentLocation) : 'Location unknown'}</span></header>
       <div class="table-toolbar"><input aria-label="Search minables" placeholder="Filter material or location" bind:value={minableSearch} /><span>{visibleMinables().length} materials · {settings.watchedMaterials.length} watched</span></div>
       <div class="data-table minables-table" role="table" aria-label="Minable location reference">
-        <div class="table-head" role="row"><span>Material</span><span>Known locations</span><span>Here</span><span>Watch</span></div>
+        <div class="table-head" role="row"><span>Material</span><span>Class</span><span>Signature</span><span>Known locations</span><span>Here</span><span>Watch</span></div>
         {#each visibleMinables() as row}
           <div class:valid-here={!!gameLogStatus.currentLocation && materialValidAtLocation(row.material, gameLogStatus.currentLocation)} class="table-row" role="row">
-            <strong>{row.material}</strong><span>{row.locations.map(locationLabel).join(' · ')}</span>
-            <span class="validity">{gameLogStatus.currentLocation ? (materialValidAtLocation(row.material, gameLogStatus.currentLocation) ? 'VALID' : 'OUT') : '—'}</span>
+            <strong>{row.material}</strong><span>{row.category ?? 'Mineable'}</span><span class="mono">{signatureSummary(row)}</span><span>{row.locations.length ? row.locations.map(locationLabel).join(' · ') : 'No location restriction published'}</span>
+            <span class="validity">{locationValidity(row)}</span>
             <button class:watched={isWatched(row.material)} class="watch-action" aria-label={`${isWatched(row.material) ? 'Unwatch' : 'Watch'} ${row.material}`} onclick={() => toggleWatch(row.material)}><i></i>{isWatched(row.material) ? 'Watched' : 'Watch'}</button>
           </div>
-        {/each}
-      </div>
-    </section>
-  {:else if currentPage === 'materials'}
-    <section class="workspace-page">
-      <header class="workspace-heading"><div><small>Signature library</small><h1>Materials</h1></div><span class="eyebrow">{getSignatures().materials.length} profiles</span></header>
-      <p class="page-intro">Every value is read from SigLock's canonical signature profiles. Scroll horizontally to inspect higher supported rock counts.</p>
-      <div class="data-table materials-table" role="table" aria-label="Material signatures" style={`--signature-columns:${signatureRockCounts().length}`}>
-        <div class="table-head" role="row"><span>Material</span><span>Class</span>{#each signatureRockCounts() as rockCount}<span>{rockCount === 1 ? 'Base · 1' : `Increment ${rockCount}`}</span>{/each}</div>
-        {#each getSignatures().materials as material}
-          <div class="table-row" role="row"><strong>{material.materialName}</strong><span>{material.category ?? 'Mineable'}</span>{#each signatureRockCounts() as rockCount}<span class="mono">{signatureForRockCount(material, rockCount)}</span>{/each}</div>
         {/each}
       </div>
     </section>
@@ -1348,7 +1381,7 @@
     <section class="workspace-page overlay-workspace">
       <header class="workspace-heading"><div><small>HUD augmentation</small><h1>Overlay</h1></div><span class="eyebrow">{overlayVisible ? 'Visible' : 'Hidden'}</span></header>
       <div class="overlay-config-grid">
-        <section class="instrument-panel"><div class="instrument-title"><span>Positioning</span><b>{shipLabel(activeShip)} profile</b></div><div class="button-row"><button class:active={overlaySetupMode} onclick={toggleOverlaySetupMode}>{overlaySetupMode ? 'Lock position' : 'Unlock position'}</button><button onclick={resetOverlayPosition}>Reset</button><button onclick={toggleOverlay}>{overlayVisible ? 'Hide' : 'Show'}</button></div></section>
+        <section class="instrument-panel"><div class="instrument-title"><span>Positioning</span><b>{activeRegionProfile().name} profile</b></div><div class="button-row"><button class:active={overlaySetupMode} onclick={toggleOverlaySetupMode}>{overlaySetupMode ? 'Lock position' : 'Unlock position'}</button><button onclick={resetOverlayPosition}>Reset</button><button onclick={toggleOverlay}>{overlayVisible ? 'Hide' : 'Show'}</button></div></section>
         <section class="instrument-panel hud-preview-panel"><div class="instrument-title"><span>HUD preview</span><b>Minimal mode</b></div><div class="hud-preview"><header><strong>SIGLOCK</strong><span><i class:online={activeScanOn}></i>AUTO</span></header><p>Hadinite</p><p>Aphorite <i class="watch-demo"></i></p><p>Dolivine</p></div></section>
       </div>
     </section>
