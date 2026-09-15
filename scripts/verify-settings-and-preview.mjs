@@ -43,7 +43,15 @@ assert.ok(!page.includes('capturePreviewTimer'));
 assert.ok(!page.includes('startCapturePreview'));
 assert.ok(!page.includes('setInterval('));
 assert.match(page, /function openSettingsPane\(\)[\s\S]*?refreshCapturePreview\(\)/);
-assert.match(page, /crop-region-updated[\s\S]*?settingsOpen\) void refreshCapturePreview\(\)/);
+assert.match(page, /crop-region-updated[\s\S]*?currentPage === 'regions' \|\| currentPage === 'settings'/);
+assert.match(page, /<aside class="side-rail">/);
+assert.match(page, /currentPage === 'settings'[\s\S]*?class="workspace-page settings-page"/);
+assert.ok(!page.includes('settings-backdrop'));
+assert.ok(!page.includes('class="app-nav"'));
+assert.ok(!page.includes('class="status-strip"'));
+assert.match(page, /signatureRockCounts\(\)[\s\S]*?Increment \$\{rockCount\}/);
+assert.match(settings, /overlayOpacity:\s*0,/);
+assert.match(settings, /overlayOpacity, DEFAULT_SETTINGS\.overlayOpacity, 0, 1/);
 
 assert.ok(!rust.includes('[Capture] Saved raw crop to:'));
 assert.ok(!rust.includes('last_capture.png'));
@@ -64,5 +72,8 @@ assert.match(overlay, /class:pulsing=\{match\.detected\} class="watch-dot"/);
 assert.match(overlay, /@keyframes watch-pulse/);
 assert.ok(!overlay.includes('class:pulsing={match.detected} class="match-item"'));
 assert.ok(!overlay.includes('Current Location'));
+const activeScanCommand = rust.match(/async fn toggle_active_scan\([\s\S]*?\n\}/)?.[0] ?? '';
+assert.ok(activeScanCommand, 'Missing active scan command');
+assert.ok(!/\.hide\(\)/.test(activeScanCommand), 'Auto Scan must not hide the HUD overlay');
 
 console.log('Settings and capture preview acceptance checks passed.');

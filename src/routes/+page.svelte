@@ -8,7 +8,6 @@
   import { openUrl } from '@tauri-apps/plugin-opener';
   import { relaunch } from '@tauri-apps/plugin-process';
   import { check, type Update } from '@tauri-apps/plugin-updater';
-  import { dev } from '$app/environment';
   import { findNearestSignature, getSignatures, matchObservedValue, type MatchResult } from '$lib/data/signatures';
   import { getMinableReference, locationLabel, materialValidAtLocation } from '$lib/data/materialLocations';
   import {
@@ -143,7 +142,6 @@
   let releaseNotesLoading = $state(false);
   let releaseNotesError = $state(false);
   let releaseNotes = $state<ReleaseNoteVersion[]>([]);
-  let settingsOpen = $state(false);
   let openSettingsSection = $state<'shortcuts' | 'scan' | 'overlay' | 'advanced'>('shortcuts');
   let unlisteners: UnlistenFn[] = [];
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -797,6 +795,24 @@
     return history;
   }
 
+  function operationalHistory() {
+    return history.filter((entry) => entry.status === 'matched' || entry.status === 'failed').slice(0, 4);
+  }
+
+  function routineReadCount() {
+    return history
+      .filter((entry) => entry.status === 'invalid' || entry.status === 'no match' || entry.status === 'skipped')
+      .reduce((total, entry) => total + entry.repeatCount, 0);
+  }
+
+  function signatureRockCounts() {
+    return [...new Set(getSignatures().materials.flatMap((material) => material.signatures.map((entry) => entry.rockCount)))].sort((a, b) => a - b);
+  }
+
+  function signatureForRockCount(material: ReturnType<typeof getSignatures>['materials'][number], rockCount: number) {
+    return material.signatures.find((entry) => entry.rockCount === rockCount)?.value ?? '—';
+  }
+
   function historyTitle(entry: HistoryEntry) {
     if (isSystemError(entry)) return 'Scan error';
     if (entry.status === 'failed') return 'Scan failed';
@@ -959,21 +975,13 @@
   }
 
   function openSettingsPane() {
-    settingsOpen = true;
+    currentPage = 'settings';
     void refreshCapturePreview();
   }
 
   function navigatePage(page: AppPage) {
-    if (page === 'settings') {
-      openSettingsPane();
-      return;
-    }
     currentPage = page;
-    if (page === 'regions') void refreshCapturePreview();
-  }
-
-  function closeSettingsPane() {
-    settingsOpen = false;
+    if (page === 'regions' || page === 'settings') void refreshCapturePreview();
   }
 
   function openSettings(section: typeof openSettingsSection) {
@@ -1119,7 +1127,7 @@
         if (!configuredShips.includes(activeShip)) configuredShips = [...configuredShips, activeShip];
         regionLoadComplete = true;
         scannerStatus = 'Capture region saved';
-        if (settingsOpen) void refreshCapturePreview();
+        if (currentPage === 'regions' || currentPage === 'settings') void refreshCapturePreview();
       }
     }));
     unlisteners.push(await listen<GameLogStatus>('game-log-status-updated', (event) => {
@@ -1197,67 +1205,99 @@
 
 <svelte:head><title>SigLock</title></svelte:head>
 
-<main>
-  <header class="topbar">
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="drag-title" onmousedown={startMainWindowDrag} ondblclick={preventTitlebarDoubleClick}>
-      <img class="brand-mark" src="/siglock-icon.png" alt="" />
-      <strong>SigLock</strong>
-      <span>Mining Signature Overlay</span>
-      <i></i>
+<main class="app-shell">
+  <aside class="side-rail">
+    <div class="brand-lockup">
+      <img src="/siglock-icon.png" alt="" />
+      <div><strong>SigLock</strong><span>scan smarter<br />mine better</span></div>
     </div>
-    <div class="top-actions">
-      <button class:good={overlaySetupMode} onclick={toggleOverlaySetupMode}>{overlaySetupMode ? 'Lock Overlay' : 'Unlock Overlay'}</button>
-      <button class:primary={!activeScanOn} class:active={activeScanOn} onclick={toggleActiveScan}>Auto: {activeScanOn ? 'Stop' : 'Start'}</button>
-      <button class="icon-action" aria-label="Settings" title="Settings" onclick={openSettingsPane}>
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z" />
-          <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1A2 2 0 0 1 4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9L4.2 7A2 2 0 0 1 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1A2 2 0 0 1 19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.5 1h.1a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" />
-        </svg>
-      </button>
-      <button class="window-control" aria-label="Minimize" title="Minimize" onclick={minimizeWindow}>_</button>
-      <button class="window-control close" aria-label="Close" title="Close" onclick={closeApp}>X</button>
-    </div>
-  </header>
+    <nav aria-label="Primary navigation">
+      {#each [
+        ['dashboard', '⌂', 'Dashboard'], ['overlay', '▣', 'Overlay'], ['regions', '⌖', 'Regions'],
+        ['minables', '◈', 'Minables'], ['materials', '▤', 'Materials'], ['settings', '⚙', 'Settings'],
+      ] as item}
+        <button class:active={currentPage === item[0]} onclick={() => navigatePage(item[0] as AppPage)}>
+          <span aria-hidden="true">{item[1]}</span>{item[2]}
+        </button>
+      {/each}
+    </nav>
+    <div class="rail-footer"><span>Star Citizen utility</span><b>v{displayVersion(appVersion)}</b></div>
+  </aside>
 
-  <nav class="app-nav" aria-label="Primary navigation">
-    {#each [
-      ['dashboard', 'Dashboard'], ['regions', 'Regions'], ['minables', 'Minables'],
-      ['materials', 'Materials'], ['overlay', 'Overlay'], ['settings', 'Settings'],
-    ] as item}
-      <button class:active={currentPage === item[0] || (item[0] === 'settings' && settingsOpen)} onclick={() => navigatePage(item[0] as AppPage)}>{item[1]}</button>
-    {/each}
-    <span class="nav-telemetry"><i class:live={gameLogStatus.health === 'monitoring'}></i>{gameLogStatus.channel ?? 'LOG OFFLINE'}</span>
-  </nav>
+  <div class="app-workspace">
+    <header class="topbar">
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div class="drag-title" onmousedown={startMainWindowDrag} ondblclick={preventTitlebarDoubleClick}>
+        <span>Star Citizen mining scanner utility</span><i></i>
+      </div>
+      <div class="connection-state"><i class:live={gameLogStatus.health === 'monitoring'}></i>{gameLogStatus.health === 'monitoring' ? 'Connected' : 'Telemetry offline'}</div>
+      <button class="window-control" aria-label="Minimize" title="Minimize" onclick={minimizeWindow}>—</button>
+      <button class="window-control close" aria-label="Close" title="Close" onclick={closeApp}>×</button>
+    </header>
 
-  <nav class="system-filter" aria-label="Signature system filter">
-    <span>Ship</span>
-    {#each ['golem', 'prospector', 'mole'] as ship}
-      <button
-        class:active={activeShip === ship}
-        class:configured={configuredShips.includes(ship as ShipId)}
-        onclick={() => switchShip(ship as ShipId)}
-      >{shipLabel(ship as ShipId)}</button>
-    {/each}
-    {#if gameLogStatus.detectedShip}
-      <span class="ship-evidence" title="Game.log evidence only; the selected profile remains manual">LOG {shipLabel(gameLogStatus.detectedShip)}</span>
-    {/if}
-    <i aria-hidden="true"></i>
-    <span>System</span>
-    {#each ['All', 'Stanton', 'Pyro', 'Nyx'] as system}
-      <button class:active={settings.selectedSystemFilter === system} onclick={() => setSystemFilter(system as SystemFilter)}>{system}</button>
-    {/each}
-  </nav>
+    <section class="profile-bar" aria-label="Active ship profile">
+      <div class="profile-label"><span aria-hidden="true">✥</span><div><small>Active ship</small><strong>Profile</strong></div></div>
+      <div class="ship-selector">
+        {#each ['golem', 'prospector', 'mole'] as ship}
+          <button class:active={activeShip === ship} class:configured={configuredShips.includes(ship as ShipId)} onclick={() => switchShip(ship as ShipId)}>{shipLabel(ship as ShipId)}</button>
+        {/each}
+      </div>
+      <p>OCR regions and overlay position are saved per ship profile.</p>
+      <nav class="system-selector" aria-label="Signature system filter">
+        {#each ['All', 'Stanton', 'Pyro', 'Nyx'] as system}
+          <button class:active={settings.selectedSystemFilter === system} onclick={() => setSystemFilter(system as SystemFilter)}>{system}</button>
+        {/each}
+      </nav>
+    </section>
 
   {#if currentPage === 'dashboard'}
-  <section class="status-strip" aria-label="Session status">
-    <div class="status-card {regionSummary().tone} region-card">
-      <div><small>Region</small><strong>{regionSummary().value}</strong><span>{regionSummary().detail}</span></div>
-      <button onclick={setRegion}>{regionSummary().action}</button>
-    </div>
-    <div class="status-card {scannerSummary().tone}"><small>Scanner</small><strong>{scannerSummary().value}</strong><span>{scannerSummary().detail}</span></div>
-    <div class="status-card {gameLogStatus.currentLocation ? 'good' : 'neutral'}"><small>Location</small><strong>{gameLogStatus.currentLocation ? gameLogStatus.currentLocation[0].toUpperCase() + gameLogStatus.currentLocation.slice(1) : 'Unknown'}</strong><span>{gameLogStatus.currentLocation ? `${gameLogStatus.locationConfidence} confidence` : 'Waiting for strong log evidence'}</span></div>
-    <div class="status-card {lastScanSummaryCard().tone}"><small>Last</small><strong>{lastScanSummaryCard().value}</strong><span>{lastScanSummaryCard().detail}</span></div>
+  <section class="dashboard-grid">
+    <article class="module region-module">
+      <header><div><small>OCR capture</small><h2>Region management</h2></div><button onclick={setRegion}>+ {captureRegion ? 'Redraw' : 'New region'}</button></header>
+      <p class="module-copy">Screen area scanned for {shipLabel(activeShip)} signatures.</p>
+      <div class:active={!!captureRegion} class="region-entry">
+        <i></i><div><strong>{shipLabel(activeShip)} signature readout</strong><span>{captureRegion ? `x ${captureRegion.x} · y ${captureRegion.y} · ${captureRegion.width} × ${captureRegion.height}` : 'No capture area configured'}</span></div><b>{captureRegion ? 'Active' : 'Missing'}</b>
+      </div>
+      <div class="profile-region-list">
+        {#each ['golem', 'prospector', 'mole'] as ship}
+          {#if ship !== activeShip}<div><i class:configured={configuredShips.includes(ship as ShipId)}></i><span>{shipLabel(ship as ShipId)} profile</span><b>{configuredShips.includes(ship as ShipId) ? 'Configured' : 'Not set'}</b></div>{/if}
+        {/each}
+      </div>
+      <footer><button onclick={setRegion} disabled={!captureRegion}>Edit</button><button onclick={() => refreshCapturePreview(true)} disabled={!captureRegion}>Capture preview</button><button onclick={clearRegion} disabled={!captureRegion}>Reset</button></footer>
+    </article>
+
+    <article class="module scanner-module">
+      <header><div><small>Recognition engine</small><h2>Scanner state</h2></div><span class="state-dot {scannerSummary().tone}">{scannerSummary().value}</span></header>
+      <div class="auto-control"><div class="scan-orbit" class:running={activeScanOn}><span></span></div><div><small>Auto-Scan</small><strong>{activeScanOn ? 'ON' : 'OFF'}</strong></div><button role="switch" aria-label="Toggle Auto-Scan" aria-checked={activeScanOn} class:active={activeScanOn} onclick={toggleActiveScan}><i></i></button></div>
+      <div class="scan-metrics"><div><strong>{settings.activeScanIntervalMs / 1000}s</strong><span>Interval</span></div><div><strong>{currentFinds().length}</strong><span>Current finds</span></div><div><strong>{lastScanSummaryCard().value}</strong><span>Last result</span></div></div>
+      <footer><button class="primary" onclick={() => performScan('Manual')} disabled={isScanning || !captureRegion}>{isScanning ? 'Scanning…' : 'Scan now'}</button><span class:visible={overlayVisible}><i></i>HUD {overlayVisible ? 'visible' : 'hidden'}</span></footer>
+    </article>
+
+    <article class="module watch-module">
+      <header><div><small>Recognition priorities</small><h2>Minables & watchlist</h2></div><button class="text-action" onclick={() => navigatePage('minables')}>View all →</button></header>
+      <div class="watch-list">
+        {#each visibleMinables().filter((row) => isWatched(row.material)).slice(0, 5) as row}<button onclick={() => toggleWatch(row.material)}><i class:detected={currentFinds().some((find) => normalizeMaterial(find.material) === normalizeMaterial(row.material))}></i><span>{row.material}</span><b>{currentFinds().some((find) => normalizeMaterial(find.material) === normalizeMaterial(row.material)) ? 'Detected' : 'Watching'}</b></button>{/each}
+        {#if !settings.watchedMaterials.length}<div class="compact-empty">No watched materials. Add them from Minables.</div>{/if}
+      </div>
+    </article>
+
+    <article class="module finds-module">
+      <header><div><small>Actionable recognition</small><h2>Current materials</h2></div><span>{currentFinds().length} detected</span></header>
+      <div class="material-results">
+        {#if currentFinds().length}
+          {#each currentFinds().slice(0, 5) as match}<div><i></i><strong>{materialLabel(match.material)}</strong><span>{match.rockCount} rock{match.rockCount === 1 ? '' : 's'}</span><b>{match.valueLabel ?? match.detailLabel ?? 'Matched'}</b></div>{/each}
+        {:else}<div class="results-empty"><span aria-hidden="true">◇</span><strong>Waiting for a recognized signature</strong><p>Matched materials appear here; routine invalid OCR reads stay out of the way.</p></div>{/if}
+      </div>
+      <footer class="activity-summary"><span>{operationalHistory().length} significant events</span>{#if routineReadCount()}<span>{routineReadCount()} routine misses consolidated</span>{/if}<button onclick={() => { openSettings('advanced'); navigatePage('settings'); }}>Diagnostics →</button></footer>
+    </article>
+
+    <article class="module overlay-dashboard">
+      <header><div><small>Live HUD output</small><h2>Overlay preview</h2></div><button onclick={() => navigatePage('overlay')}>Configure overlay</button></header>
+      <div class="overlay-stage" style={`--preview-text:${settings.overlayTextColor};--preview-bg:${settings.overlayBackgroundColor};--preview-accent:${settings.overlayAccentColor};--preview-opacity:${settings.overlayOpacity};--preview-size:${settings.overlayFontSize}px`}>
+        <div class="hud-preview live-preview"><header><strong>SIGLOCK</strong><span><i class:online={activeScanOn}></i>AUTO</span></header>{#if currentFinds().length}{#each currentFinds().slice(0, 3) as match}<p><span>{match.material}</span>{#if isWatched(match.material)}<i class="watch-demo"></i>{/if}</p>{/each}{:else}<p class="hud-empty">Results appear here</p>{/if}</div>
+      </div>
+      <footer><span class:visible={overlayVisible}><i></i>{overlayVisible ? 'Visible in game' : 'Hidden'}</span><button onclick={toggleOverlay}>{overlayVisible ? 'Hide HUD' : 'Show HUD'}</button></footer>
+    </article>
   </section>
   {:else if currentPage === 'regions'}
     <section class="workspace-page regions-workspace">
@@ -1296,10 +1336,11 @@
   {:else if currentPage === 'materials'}
     <section class="workspace-page">
       <header class="workspace-heading"><div><small>Signature library</small><h1>Materials</h1></div><span class="eyebrow">{getSignatures().materials.length} profiles</span></header>
-      <div class="data-table materials-table" role="table" aria-label="Material signatures">
-        <div class="table-head" role="row"><span>Material</span><span>Class</span><span>Base signature</span><span>Range</span></div>
+      <p class="page-intro">Every value is read from SigLock's canonical signature profiles. Scroll horizontally to inspect higher supported rock counts.</p>
+      <div class="data-table materials-table" role="table" aria-label="Material signatures" style={`--signature-columns:${signatureRockCounts().length}`}>
+        <div class="table-head" role="row"><span>Material</span><span>Class</span>{#each signatureRockCounts() as rockCount}<span>{rockCount === 1 ? 'Base · 1' : `Increment ${rockCount}`}</span>{/each}</div>
         {#each getSignatures().materials as material}
-          <div class="table-row" role="row"><strong>{material.materialName}</strong><span>{material.category ?? 'Mineable'}</span><span class="mono">{material.signatures[0]?.value ?? '—'}</span><span>{material.signatures.length} rock count{material.signatures.length === 1 ? '' : 's'}</span></div>
+          <div class="table-row" role="row"><strong>{material.materialName}</strong><span>{material.category ?? 'Mineable'}</span>{#each signatureRockCounts() as rockCount}<span class="mono">{signatureForRockCount(material, rockCount)}</span>{/each}</div>
         {/each}
       </div>
     </section>
@@ -1313,79 +1354,10 @@
     </section>
   {/if}
 
-  {#if currentPage === 'dashboard'}
-  <section class="panel finds-panel">
-    <div class="section-title">
-      <h2>Current Finds</h2>
-      <span class="count-pill">{currentFinds().length}</span>
-    </div>
-    {#if currentFinds().length}
-      <div class="find-grid">
-        {#each currentFinds().slice(0, 3) as match}
-          <div class="find-card">
-            <strong>{materialLabel(match.material)}</strong>
-            {#if isWatched(match.material)}<i class="find-watch-dot" title="Watched material"></i>{/if}
-            <span>{match.rockCount} rocks{match.valueLabel ? ` | ${match.valueLabel}` : ''}</span>
-            {#if settings.showComposition && match.compositionProfile?.entries.length}
-              <small>Trace materials</small>
-              {#each match.compositionProfile.entries as entry}
-                <span>{entry.displayName} {compositionPercent(entry)}</span>
-              {/each}
-            {:else}
-              <small>Latest</small>
-            {/if}
-            {#if match.repeatCount > 1}<b>x{match.repeatCount}</b>{/if}
-          </div>
-        {/each}
-      </div>
-    {:else}
-      <div class="find-empty">
-        <strong>No current finds</strong>
-        <span>Run a scan to pin matched materials here.</span>
-      </div>
-    {/if}
-  </section>
-
-  <section class="panel history-card">
-    <div class="section-title history-title">
-      <h2>Scan Feed</h2>
-      <div class="history-actions">
-        <div class="filter-group" aria-label="Filter scan results">
-          <button class:active={historyFilter === 'all'} onclick={() => historyFilter = 'all'}>All</button>
-          <button class:active={historyFilter === 'matches'} onclick={() => historyFilter = 'matches'}>Matches</button>
-          <button class:active={historyFilter === 'issues'} onclick={() => historyFilter = 'issues'}>Issues</button>
-        </div>
-        <button onclick={() => history = []} disabled={!history.length}>Clear</button>
-      </div>
-    </div>
-    <div class="history-list">
-      {#if visibleHistory().length}
-        {#each visibleHistory() as entry (entry.id)}
-          <div class:matched-row={entry.status === 'matched'} class="history-row">
-            <span class:system-error={isSystemError(entry)} class="status {entry.status}">{historyStatus(entry)}</span>
-            <div class="history-primary">
-              <strong>{historyTitle(entry)}</strong>
-              <span>{historyDetail(entry)}</span>
-            </div>
-            {#if entry.repeatCount > 1}<b class="repeat">x{entry.repeatCount}</b>{/if}
-          </div>
-        {/each}
-      {:else}
-        <div class="feed-empty">
-          <strong>{history.length ? 'No results in this view' : 'Scan feed ready'}</strong>
-          <span>{history.length ? 'Try a different filter.' : 'Manual, auto, invalid, skipped, and match rows will appear here.'}</span>
-        </div>
-      {/if}
-    </div>
-  </section>
-  {/if}
-
-  {#if settingsOpen}
-    <div class="settings-backdrop" role="presentation" onclick={closeSettingsPane}></div>
-    <aside class="settings-panel" aria-label="Settings">
+  {#if currentPage === 'settings'}
+    <section class="workspace-page settings-page" aria-label="Settings">
       <div class="settings-header">
-        <h2>Settings</h2>
-        <button class="window-control" aria-label="Close settings" onclick={closeSettingsPane}>X</button>
+        <div><small>Application preferences</small><h1>Settings</h1><p>Scanner, shortcuts, overlay appearance, and diagnostics.</p></div>
       </div>
 
       <section class="settings-section">
@@ -1465,7 +1437,7 @@
               <label>Text color <input type="color" bind:value={settings.overlayTextColor} onchange={persistSettings} /></label>
               <label>Background <input type="color" bind:value={settings.overlayBackgroundColor} onchange={persistSettings} /></label>
               <label>Accent <input type="color" bind:value={settings.overlayAccentColor} onchange={persistSettings} /></label>
-              <label>Opacity <strong>{Math.round(settings.overlayOpacity * 100)}%</strong><input type="range" min="0.35" max="1" step="0.05" bind:value={settings.overlayOpacity} onchange={persistSettings} /></label>
+              <label>Opacity <strong>{Math.round(settings.overlayOpacity * 100)}%</strong><input type="range" min="0" max="1" step="0.05" bind:value={settings.overlayOpacity} onchange={persistSettings} /></label>
               <label>Text size <strong>{settings.overlayFontSize}px</strong><input type="range" min="11" max="20" step="1" bind:value={settings.overlayFontSize} onchange={persistSettings} /></label>
               <label>Result lifetime <strong>{settings.overlayResultLifetimeSeconds}s</strong><input type="range" min="5" max="120" step="5" bind:value={settings.overlayResultLifetimeSeconds} onchange={persistSettings} /></label>
               <label class="toggle"><input type="checkbox" bind:checked={settings.overlayHighContrast} onchange={persistSettings} /><span></span> High contrast</label>
@@ -1493,8 +1465,7 @@
         {/if}
       </section>
 
-      {#if dev}
-        <section class="settings-section">
+      <section class="settings-section">
           <button class="accordion-header" class:open={openSettingsSection === 'advanced'} aria-expanded={openSettingsSection === 'advanced'} aria-controls="settings-advanced" onclick={() => openSettings('advanced')}>
             <span class="accordion-heading"><strong>Advanced Debug</strong><small>Diagnostics, OCR and troubleshooting options.</small></span>
             <span class="accordion-indicator" aria-hidden="true"></span>
@@ -1503,10 +1474,14 @@
           <div class="accordion-body" id="settings-advanced">
           <label class="field">Tolerance <input type="number" min="0" max="200" bind:value={tolerance} /></label>
           <pre>{JSON.stringify({ tesseractStatus, debugResult, ocrError, overlayError, keybindError, scannerStatus, captureRegion, lastScanSummary, lastScanTime }, null, 2)}</pre>
+          <section class="diagnostic-feed">
+            <header><div><small>Raw troubleshooting data</small><h2>Scan diagnostics</h2></div><div class="filter-group" aria-label="Filter scan results"><button class:active={historyFilter === 'all'} onclick={() => historyFilter = 'all'}>All</button><button class:active={historyFilter === 'matches'} onclick={() => historyFilter = 'matches'}>Matches</button><button class:active={historyFilter === 'issues'} onclick={() => historyFilter = 'issues'}>Issues</button></div></header>
+            {#each visibleHistory().slice(0, 12) as entry (entry.id)}<div class="history-row"><span class="status {entry.status}">{historyStatus(entry)}</span><div><strong>{historyTitle(entry)}</strong><small>{historyDetail(entry)}</small></div>{#if entry.repeatCount > 1}<b>x{entry.repeatCount}</b>{/if}</div>{/each}
+            {#if !history.length}<p class="compact-empty">No diagnostic events captured.</p>{/if}
+          </section>
           </div>
           {/if}
-        </section>
-      {/if}
+      </section>
 
       <footer class="settings-footer">
         <span>Current version: {displayVersion(appVersion)}</span>
@@ -1514,8 +1489,10 @@
         {#if updateStatus}<p class="update-message">{updateStatus}</p>{/if}
         <button class="link-button" onclick={openReleaseNotes}>Release Notes</button>
       </footer>
-    </aside>
+    </section>
   {/if}
+
+  </div>
 
   {#if releaseNotesOpen}
     <div class="modal-backdrop" role="presentation" onclick={() => releaseNotesOpen = false}></div>
