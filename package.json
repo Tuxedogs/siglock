@@ -12,7 +12,7 @@
     "tauri": "tauri",
     "validate:updater": "node scripts/validate-updater-manifest.mjs",
     "data:compositions": "node scripts/generate-rock-compositions.mjs",
-    "test:features": "node scripts/verify-rock-compositions.mjs && node scripts/verify-settings-and-preview.mjs"
+    "test:features": "node scripts/verify-rock-compositions.mjs && node scripts/verify-settings-and-preview.mjs && node scripts/verify-location-matching.mjs"
   },
   "license": "MIT",
   "dependencies": {

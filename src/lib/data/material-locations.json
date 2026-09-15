@@ -1,0 +1,29 @@
+{
+  "source": "Scintel api/mining/material_sources.json",
+  "locations": {
+    "Agricium": ["cellin", "daymar", "yela"],
+    "Aluminum": ["aberdeen", "ariel", "ita", "magda"],
+    "Aphorite": ["aberdeen", "ariel", "calliope", "cellin", "clio", "daymar", "euterpe", "ita", "lyria", "magda", "wala", "yela"],
+    "Aslarite": ["ita", "magda"],
+    "Beradom": ["aberdeen", "ariel", "calliope", "cellin", "clio", "daymar", "euterpe", "ita", "lyria", "magda", "wala", "yela"],
+    "Beryl": ["wala"],
+    "Copper": ["clio", "euterpe", "lyria", "wala"],
+    "Corundum": ["aberdeen", "ariel"],
+    "Dolivine": ["aberdeen", "ariel", "calliope", "cellin", "clio", "daymar", "euterpe", "ita", "lyria", "magda", "wala", "yela"],
+    "Feynmaline": ["aberdeen", "ariel", "calliope", "cellin", "clio", "daymar", "euterpe", "ita", "lyria", "magda", "wala", "yela"],
+    "Glacosite": ["aberdeen", "ariel", "calliope", "cellin", "clio", "daymar", "euterpe", "ita", "lyria", "magda", "wala", "yela"],
+    "Hadanite": ["aberdeen", "ariel", "cellin", "daymar", "ita", "magda", "yela"],
+    "Hephaestanite": ["ariel", "calliope"],
+    "Iron": ["calliope", "lyria", "magda", "wala"],
+    "Janalite": ["calliope", "clio", "euterpe", "lyria", "wala"],
+    "Laranite": ["lyria", "wala"],
+    "Ouratite": ["aberdeen", "ariel"],
+    "Quantanium": ["aberdeen", "ariel", "calliope", "cellin", "clio", "daymar", "euterpe", "ita", "lyria", "magda", "wala", "yela"],
+    "Quartz": ["cellin", "daymar", "yela"],
+    "Raw Ice": ["calliope", "clio", "euterpe"],
+    "Silicon": ["cellin", "daymar", "yela"],
+    "Taranite": ["cellin", "clio", "euterpe", "yela"],
+    "Tin": ["ariel", "ita"],
+    "Titanium": ["aberdeen", "magda"]
+  }
+}

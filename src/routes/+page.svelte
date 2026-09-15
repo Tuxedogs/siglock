@@ -30,6 +30,18 @@
     scanRegion: ScanRegion | null;
     configuredShips: ShipId[];
   };
+  type GameLogStatus = {
+    path: string | null;
+    channel: string | null;
+    health: string;
+    currentLocation: string | null;
+    locationSource: string | null;
+    locationConfidence: string | null;
+    detectedShip: ShipId | null;
+    shipSource: string | null;
+    playerHandle: string | null;
+    lastLineAt: string | null;
+  };
   type HistoryEntry = {
     id: number;
     timestamp: string;
@@ -135,6 +147,12 @@
   let lastCapturePreviewAt = 0;
   let scannerStatusBeforeRegionPicker = 'Ready';
   let mainWindowDragActive = false;
+  let gameLogStatus = $state<GameLogStatus>({
+    path: null, channel: null, health: 'starting', currentLocation: null,
+    locationSource: null, locationConfidence: null, detectedShip: null,
+    shipSource: null, playerHandle: null, lastLineAt: null,
+  });
+  let gameLogPathInput = $state('');
 
   function isValidRegion(region: unknown): region is ScanRegion {
     if (!region || typeof region !== 'object') return false;
@@ -165,6 +183,7 @@
       system: settings.selectedSystemFilter,
       includeSalvage: settings.returnSalvageResults,
       includeFpsRoc: settings.includeFpsRocResults,
+      location: gameLogStatus.currentLocation,
     };
   }
 
@@ -275,6 +294,16 @@
           ? '[SigLock] startup region load: found valid saved region'
           : '[SigLock] startup region load: no valid saved region');
       }
+    }
+  }
+
+  async function saveGameLogPath() {
+    try {
+      gameLogStatus = await invoke<GameLogStatus>('configure_game_log_path', { path: gameLogPathInput });
+      gameLogPathInput = gameLogStatus.path ?? gameLogPathInput;
+      scannerStatus = `Monitoring ${gameLogStatus.channel ?? 'Game.log'}`;
+    } catch (error) {
+      scannerStatus = `Game.log path failed: ${String(error)}`;
     }
   }
 
@@ -1049,6 +1078,10 @@
         if (settingsOpen) void refreshCapturePreview();
       }
     }));
+    unlisteners.push(await listen<GameLogStatus>('game-log-status-updated', (event) => {
+      gameLogStatus = event.payload;
+      if (!gameLogPathInput && event.payload.path) gameLogPathInput = event.payload.path;
+    }));
     unlisteners.push(await listen('region-picker-cancelled', () => {
       scannerStatus = scannerStatusBeforeRegionPicker;
     }));
@@ -1092,6 +1125,8 @@
       activeScanOn = !!appState?.active_scan_enabled;
       overlayVisible = !!appState?.overlay_visible;
       overlaySetupMode = !!appState?.overlay_setup_mode;
+      gameLogStatus = await invoke<GameLogStatus>('get_game_log_status');
+      gameLogPathInput = gameLogStatus.path ?? '';
     } catch (error) {
       scannerStatus = `Backend check failed: ${String(error)}`;
     }
@@ -1163,6 +1198,7 @@
       <button onclick={setRegion}>{regionSummary().action}</button>
     </div>
     <div class="status-card {scannerSummary().tone}"><small>Scanner</small><strong>{scannerSummary().value}</strong><span>{scannerSummary().detail}</span></div>
+    <div class="status-card {gameLogStatus.currentLocation ? 'good' : 'neutral'}"><small>Location</small><strong>{gameLogStatus.currentLocation ? gameLogStatus.currentLocation[0].toUpperCase() + gameLogStatus.currentLocation.slice(1) : 'Unknown'}</strong><span>{gameLogStatus.currentLocation ? `${gameLogStatus.locationConfidence} confidence` : 'Waiting for strong log evidence'}</span></div>
     <div class="status-card {lastScanSummaryCard().tone}"><small>Last</small><strong>{lastScanSummaryCard().value}</strong><span>{lastScanSummaryCard().detail}</span></div>
   </section>
 
@@ -1272,6 +1308,14 @@
             <div class="button-row">
               <input class="signature-input" aria-label="Test signature" placeholder="Test signature" bind:value={observed} onkeydown={(event) => event.key === 'Enter' && runManualMatch()} />
               <button onclick={runManualMatch}>Match Value</button>
+            </div>
+            <div class="field log-path-field">
+              <label for="game-log-path">Game.log path</label>
+              <div class="button-row">
+                <input id="game-log-path" bind:value={gameLogPathInput} placeholder="Auto-discovery is active" />
+                <button onclick={saveGameLogPath}>Use path</button>
+              </div>
+              <small>{gameLogStatus.path ? `${gameLogStatus.channel ?? 'Channel'} · ${gameLogStatus.health}` : 'Select a StarCitizen folder, channel folder, or Game.log only if discovery fails.'}</small>
             </div>
             <div class="interval-control"><span>Interval</span><div class="segment-group">{#each [1, 2, 3, 4] as seconds}<button class:active={settings.activeScanIntervalMs === seconds * 1000} onclick={() => setIntervalSeconds(seconds)}>{seconds}s</button>{/each}</div></div>
             <div class="button-row">
