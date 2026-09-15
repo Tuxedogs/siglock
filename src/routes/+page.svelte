@@ -152,7 +152,7 @@
   let releaseNotesLoading = $state(false);
   let releaseNotesError = $state(false);
   let releaseNotes = $state<ReleaseNoteVersion[]>([]);
-  let openSettingsSection = $state<'shortcuts' | 'scan' | 'overlay' | 'advanced'>('shortcuts');
+  let openSettingsSection = $state<'shortcuts' | 'scan' | 'advanced'>('shortcuts');
   let unlisteners: UnlistenFn[] = [];
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   let capturePreviewLoading = $state(false);
@@ -167,6 +167,7 @@
   let gameLogPathInput = $state('');
   let currentPage = $state<AppPage>('dashboard');
   let minableSearch = $state('');
+  let newRegionDraft = $state(false);
 
   function isValidRegion(region: unknown): region is ScanRegion {
     if (!region || typeof region !== 'object') return false;
@@ -370,11 +371,12 @@
     if (regionId === activeRegionId) return;
     try {
       applyRegionSnapshot(await invoke<RegionProfilesSnapshot>('set_active_region', { regionId }));
+      newRegionDraft = false;
       capturePreviewUrl = null;
       capturePreviewError = null;
       matches = [];
       scannerStatus = captureRegion
-        ? `${activeRegionProfile().name} region loaded`
+        ? `${activeRegionProfile().name} capture loaded`
         : `${activeRegionProfile().name} needs capture bounds`;
     } catch (error) {
       scannerStatus = `Region switch failed: ${String(error)}`;
@@ -385,6 +387,7 @@
     try {
       applyRegionSnapshot(await invoke<RegionProfilesSnapshot>('create_region', { name: newRegionName }));
       newRegionName = '';
+      newRegionDraft = false;
       capturePreviewUrl = null;
       scannerStatus = `${activeRegionProfile().name} created; set its OCR bounds.`;
     } catch (error) {
@@ -913,6 +916,10 @@
     return captureRegion ? `${captureRegion.width}x${captureRegion.height}` : null;
   }
 
+  function displayedCaptureRegion() {
+    return newRegionDraft ? null : captureRegion;
+  }
+
   function regionSummary() {
     const size = regionSize();
     if (!regionLoadComplete) return { value: 'Loading', detail: 'Checking saved region', tone: 'neutral', action: 'Set Region' };
@@ -1020,9 +1027,33 @@
     void refreshCapturePreview();
   }
 
+  async function confirmRegionReset() {
+    if (!captureRegion) return;
+    if (!window.confirm(`Clear the OCR capture region for ${activeRegionProfile().name}? This removes its saved bounds and live preview. You can define it again at any time.`)) return;
+    try {
+      await clearRegion();
+      scannerStatus = `${activeRegionProfile().name} OCR capture region cleared.`;
+    } catch (error) {
+      scannerStatus = `Region reset failed: ${String(error)}`;
+    }
+  }
+
   function navigatePage(page: AppPage) {
     currentPage = page;
     if (page === 'regions' || page === 'settings') void refreshCapturePreview();
+  }
+
+  function beginNewRegion() {
+    currentPage = 'regions';
+    newRegionDraft = true;
+    newRegionName = '';
+    capturePreviewUrl = null;
+    capturePreviewError = null;
+  }
+
+  async function showCapturePreview() {
+    currentPage = 'regions';
+    await refreshCapturePreview(true);
   }
 
   function openSettings(section: typeof openSettingsSection) {
@@ -1257,7 +1288,7 @@
     <nav aria-label="Primary navigation">
       {#each [
         ['dashboard', '⌂', 'Dashboard'], ['overlay', '▣', 'Overlay'], ['regions', '⌖', 'Regions'],
-        ['minables', '◈', 'Minables / Materials'], ['settings', '⚙', 'Settings'],
+        ['minables', '◈', 'Minables'], ['settings', '⚙', 'Settings'],
       ] as item}
         <button class:active={currentPage === item[0]} onclick={() => navigatePage(item[0] as AppPage)}>
           <span aria-hidden="true">{item[1]}</span>{item[2]}
@@ -1296,7 +1327,7 @@
   {#if currentPage === 'dashboard'}
   <section class="dashboard-grid">
     <article class="module region-module">
-      <header><div><small>OCR capture</small><h2>Region management</h2></div><button onclick={setRegion}>{captureRegion ? 'Redraw bounds' : 'Set bounds'}</button></header>
+      <header><div><small>OCR capture</small><h2>Region management</h2></div><button onclick={beginNewRegion}>New Region</button></header>
       <p class="module-copy">Screen area scanned for {activeRegionProfile().name} signatures.</p>
       <div class:active={!!captureRegion} class="region-entry">
         <i></i><div><strong>{activeRegionProfile().name} signature readout</strong><span>{captureRegion ? `x ${captureRegion.x} · y ${captureRegion.y} · ${captureRegion.width} × ${captureRegion.height}` : 'No capture area configured'}</span></div><b>{captureRegion ? 'Active' : 'Missing'}</b>
@@ -1306,18 +1337,18 @@
           {#if profile.id !== activeRegionId}<div><i class:configured={!!profile.scanRegion}></i><span>{profile.name}</span><b>{profile.scanRegion ? 'Configured' : 'Not set'}</b></div>{/if}
         {/each}
       </div>
-      <footer><button onclick={setRegion} disabled={!captureRegion}>Edit</button><button onclick={() => refreshCapturePreview(true)} disabled={!captureRegion}>Capture preview</button><button onclick={clearRegion} disabled={!captureRegion}>Reset</button></footer>
+      <footer><button onclick={setRegion} disabled={!captureRegion}>Edit</button><button onclick={showCapturePreview} disabled={!captureRegion}>Capture preview</button><button class="danger-action" onclick={confirmRegionReset} disabled={!captureRegion}>Reset OCR region</button></footer>
     </article>
 
     <article class="module scanner-module">
-      <header><div><small>Recognition engine</small><h2>Scanner state</h2></div><span class="state-dot {scannerSummary().tone}">{scannerSummary().value}</span></header>
+      <header><div><h2>Scanner state</h2></div><span class="state-dot {scannerSummary().tone}">{scannerSummary().value}</span></header>
       <div class="auto-control"><div class="scan-orbit" class:running={activeScanOn}><span></span></div><div><small>Auto-Scan</small><strong>{activeScanOn ? 'ON' : 'OFF'}</strong></div><button role="switch" aria-label="Toggle Auto-Scan" aria-checked={activeScanOn} class:active={activeScanOn} onclick={toggleActiveScan}><i></i></button></div>
       <div class="scan-metrics"><div><strong>{settings.activeScanIntervalMs / 1000}s</strong><span>Interval</span></div><div><strong>{currentFinds().length}</strong><span>Current finds</span></div><div><strong>{lastScanSummaryCard().value}</strong><span>Last result</span></div></div>
       <footer><button class="primary" onclick={() => performScan('Manual')} disabled={isScanning || !captureRegion}>{isScanning ? 'Scanning…' : 'Scan now'}</button><span class:visible={overlayVisible}><i></i>HUD {overlayVisible ? 'visible' : 'hidden'}</span></footer>
     </article>
 
     <article class="module watch-module">
-      <header><div><small>Recognition priorities</small><h2>Minables & watchlist</h2></div><button class="text-action" onclick={() => navigatePage('minables')}>View all →</button></header>
+      <header><div><h2>Minables</h2></div><button class="text-action" onclick={() => navigatePage('minables')}>View all →</button></header>
       <div class="watch-list">
         {#each visibleMinables().filter((row) => isWatched(row.material)).slice(0, 5) as row}<button onclick={() => toggleWatch(row.material)}><i class:detected={currentFinds().some((find) => normalizeMaterial(find.material) === normalizeMaterial(row.material))}></i><span>{row.material}</span><b>{currentFinds().some((find) => normalizeMaterial(find.material) === normalizeMaterial(row.material)) ? 'Detected' : 'Watching'}</b></button>{/each}
         {#if !settings.watchedMaterials.length}<div class="compact-empty">No watched materials. Add them from Minables.</div>{/if}
@@ -1325,7 +1356,7 @@
     </article>
 
     <article class="module finds-module">
-      <header><div><small>Actionable recognition</small><h2>Current materials</h2></div><span>{currentFinds().length} detected</span></header>
+      <header><div><h2>Current materials</h2></div><span>{currentFinds().length} detected</span></header>
       <div class="material-results">
         {#if currentFinds().length}
           {#each currentFinds().slice(0, 5) as match}<div><i></i><strong>{materialLabel(match.material)}</strong><span>{match.rockCount} rock{match.rockCount === 1 ? '' : 's'}</span><b>{match.valueLabel ?? match.detailLabel ?? 'Matched'}</b></div>{/each}
@@ -1335,7 +1366,7 @@
     </article>
 
     <article class="module overlay-dashboard">
-      <header><div><small>Live HUD output</small><h2>Overlay preview</h2></div><button onclick={() => navigatePage('overlay')}>Configure overlay</button></header>
+      <header><div><h2>Overlay preview</h2></div><button onclick={() => navigatePage('overlay')}>Configure overlay</button></header>
       <div class="overlay-stage" style={`--preview-text:${settings.overlayTextColor};--preview-bg:${settings.overlayBackgroundColor};--preview-accent:${settings.overlayAccentColor};--preview-opacity:${settings.overlayOpacity};--preview-size:${settings.overlayFontSize}px`}>
         <div class="hud-preview live-preview"><header><strong>SIGLOCK</strong><span><i class:online={activeScanOn}></i>AUTO</span></header>{#if currentFinds().length}{#each currentFinds().slice(0, 3) as match}<p><span>{match.material}</span>{#if isWatched(match.material)}<i class="watch-demo"></i>{/if}</p>{/each}{:else}<p class="hud-empty">Results appear here</p>{/if}</div>
       </div>
@@ -1344,28 +1375,29 @@
   </section>
   {:else if currentPage === 'regions'}
     <section class="workspace-page regions-workspace">
-      <header class="workspace-heading"><div><small>Capture geometry</small><h1>{activeRegionProfile().name} region</h1></div><span class="eyebrow">{regionSummary().value}</span></header>
-      <div class="region-create-row"><input aria-label="New OCR region name" maxlength="40" placeholder="New region name" bind:value={newRegionName} /><button onclick={createCustomRegion} disabled={!newRegionName.trim()}>Add region</button><button class="danger-action" onclick={deleteActiveRegion} disabled={activeRegionProfile().builtIn}>Delete selected</button></div>
+      <header class="workspace-heading"><div><small>Capture geometry</small><h1>{newRegionDraft ? 'New region' : activeRegionProfile().name}</h1></div><span class="eyebrow">{newRegionDraft ? 'Not saved' : regionSummary().value}</span></header>
+      <div class="region-create-row"><input aria-label="Region name" maxlength="40" placeholder="Name this new region" bind:value={newRegionName} /><button onclick={createCustomRegion} disabled={!newRegionName.trim()}>{newRegionDraft ? 'Save new region' : 'Add region'}</button><button class="danger-action" onclick={deleteActiveRegion} disabled={newRegionDraft || activeRegionProfile().builtIn}>Delete selected</button></div>
       <div class="region-layout">
         <section class="instrument-panel region-instrument">
-          <div class="instrument-title"><span>Saved region</span><b>{captureRegion ? `${captureRegion.width} × ${captureRegion.height}` : 'Not configured'}</b></div>
+          <div class="instrument-title"><span>Saved region</span><b>{displayedCaptureRegion() ? `${displayedCaptureRegion()!.width} × ${displayedCaptureRegion()!.height}` : 'Not configured'}</b></div>
           <div class="region-readout">
-            {#if captureRegion}
-              <dl><div><dt>X</dt><dd>{captureRegion.x}</dd></div><div><dt>Y</dt><dd>{captureRegion.y}</dd></div><div><dt>Width</dt><dd>{captureRegion.width}</dd></div><div><dt>Height</dt><dd>{captureRegion.height}</dd></div></dl>
-            {:else}<p>Select the scan-number area for this OCR region.</p>{/if}
+            {#if displayedCaptureRegion()}
+              <dl><div><dt>X</dt><dd>{displayedCaptureRegion()!.x}</dd></div><div><dt>Y</dt><dd>{displayedCaptureRegion()!.y}</dd></div><div><dt>Width</dt><dd>{displayedCaptureRegion()!.width}</dd></div><div><dt>Height</dt><dd>{displayedCaptureRegion()!.height}</dd></div></dl>
+            {:else}<p>{newRegionDraft ? 'Save a name to begin a clean OCR capture region.' : 'Select the scan-number area for this OCR region.'}</p>{/if}
           </div>
-          <div class="button-row"><button class="primary" onclick={setRegion}>{captureRegion ? 'Redraw region' : 'Set region'}</button><button onclick={clearRegion} disabled={!captureRegion}>Clear</button><button onclick={() => refreshCapturePreview(true)} disabled={!captureRegion}>Refresh preview</button></div>
+          <div class="button-row"><button class="primary" onclick={setRegion} disabled={newRegionDraft}>{captureRegion ? 'Edit region' : 'Set region'}</button><button class="danger-action" onclick={confirmRegionReset} disabled={!captureRegion || newRegionDraft}>Reset OCR region</button><button onclick={() => refreshCapturePreview(true)} disabled={!captureRegion || newRegionDraft}>Refresh preview</button></div>
         </section>
         <section class="instrument-panel preview-instrument">
           <div class="instrument-title"><span>Live crop</span><b>{capturePreviewError ?? 'OCR input'}</b></div>
-          {#if capturePreviewUrl}<img class="capture-preview large" src={capturePreviewUrl} alt="Live preview of the active ship capture region" />{:else}<div class="preview-empty">{captureRegion ? 'Refresh to inspect the current crop.' : 'No region stored for this profile.'}</div>{/if}
+          {#if capturePreviewUrl}<img class="capture-preview large" src={capturePreviewUrl} alt="Live preview of the active ship capture region" />{:else}<div class="preview-empty">{displayedCaptureRegion() ? 'Refresh to inspect the current crop.' : newRegionDraft ? 'No capture region has been created yet.' : 'No region stored for this profile.'}</div>{/if}
         </section>
       </div>
     </section>
   {:else if currentPage === 'minables'}
     <section class="workspace-page">
-      <header class="workspace-heading"><div><small>Canonical signature reference</small><h1>Minables / Materials</h1></div><span class="eyebrow">{gameLogStatus.currentLocation ? locationLabel(gameLogStatus.currentLocation) : 'Location unknown'}</span></header>
+      <header class="workspace-heading"><div><small>Canonical signature reference</small><h1>Minables</h1></div><span class="eyebrow">{gameLogStatus.currentLocation ? locationLabel(gameLogStatus.currentLocation) : 'Location unknown'}</span></header>
       <div class="table-toolbar"><input aria-label="Search minables" placeholder="Filter material or location" bind:value={minableSearch} /><span>{visibleMinables().length} materials · {settings.watchedMaterials.length} watched</span></div>
+      {#if settings.watchedMaterials.length}<div class="minables-watchlist" aria-label="Watched materials"><strong>Watchlist</strong>{#each visibleMinables().filter((row) => isWatched(row.material)) as row}<button class="watch-action watched" onclick={() => toggleWatch(row.material)}>{row.material} <span>Remove</span></button>{/each}</div>{/if}
       <div class="data-table minables-table" role="table" aria-label="Minable location reference">
         <div class="table-head" role="row"><span>Material</span><span>Class</span><span>Signature</span><span>Known locations</span><span>Here</span><span>Watch</span></div>
         {#each visibleMinables() as row}
@@ -1384,13 +1416,16 @@
         <section class="instrument-panel"><div class="instrument-title"><span>Positioning</span><b>{activeRegionProfile().name} profile</b></div><div class="button-row"><button class:active={overlaySetupMode} onclick={toggleOverlaySetupMode}>{overlaySetupMode ? 'Lock position' : 'Unlock position'}</button><button onclick={resetOverlayPosition}>Reset</button><button onclick={toggleOverlay}>{overlayVisible ? 'Hide' : 'Show'}</button></div></section>
         <section class="instrument-panel hud-preview-panel"><div class="instrument-title"><span>HUD preview</span><b>Minimal mode</b></div><div class="hud-preview"><header><strong>SIGLOCK</strong><span><i class:online={activeScanOn}></i>AUTO</span></header><p>Hadinite</p><p>Aphorite <i class="watch-demo"></i></p><p>Dolivine</p></div></section>
       </div>
+      <section class="instrument-panel overlay-settings-panel"><div class="instrument-title"><span>Overlay configuration</span><b>Saved automatically</b></div><div class="appearance-grid">
+        <label>Text color <input type="color" bind:value={settings.overlayTextColor} onchange={persistSettings} /></label><label>Background <input type="color" bind:value={settings.overlayBackgroundColor} onchange={persistSettings} /></label><label>Accent <input type="color" bind:value={settings.overlayAccentColor} onchange={persistSettings} /></label><label>Opacity <strong>{Math.round(settings.overlayOpacity * 100)}%</strong><input type="range" min="0" max="1" step="0.05" bind:value={settings.overlayOpacity} onchange={persistSettings} /></label><label>Text size <strong>{settings.overlayFontSize}px</strong><input type="range" min="11" max="20" step="1" bind:value={settings.overlayFontSize} onchange={persistSettings} /></label><label>Result lifetime <strong>{settings.overlayResultLifetimeSeconds}s</strong><input type="range" min="5" max="120" step="5" bind:value={settings.overlayResultLifetimeSeconds} onchange={persistSettings} /></label><label class="toggle"><input type="checkbox" bind:checked={settings.overlayHighContrast} onchange={persistSettings} /><span></span> High contrast</label><label class="toggle"><input type="checkbox" bind:checked={settings.overlayCompactMode} onchange={persistSettings} /><span></span> Compact mode</label><label class="toggle"><input type="checkbox" bind:checked={settings.returnSalvageResults} onchange={applyResultSettings} /><span></span> Salvage</label><label class="toggle"><input type="checkbox" bind:checked={settings.includeFpsRocResults} onchange={applyResultSettings} /><span></span> FPS/ROC</label><label class="toggle"><input type="checkbox" bind:checked={settings.showComposition} onchange={applyResultSettings} /><span></span> Show Composition</label><label class="toggle"><input type="checkbox" bind:checked={settings.showScannedValueOnOverlay} onchange={persistSettings} /><span></span> Signature Value</label><label class="toggle"><input type="checkbox" bind:checked={settings.onlyShowSolvedResults} onchange={applyResultSettings} /><span></span> Only solved captures in overlay</label>
+      </div></section>
     </section>
   {/if}
 
   {#if currentPage === 'settings'}
     <section class="workspace-page settings-page" aria-label="Settings">
       <div class="settings-header">
-        <div><small>Application preferences</small><h1>Settings</h1><p>Scanner, shortcuts, overlay appearance, and diagnostics.</p></div>
+        <div><small>Application preferences</small><h1>Settings</h1><p>Scanner controls, shortcuts, and diagnostics.</p></div>
       </div>
 
       <section class="settings-section">
@@ -1438,8 +1473,8 @@
             </div>
             <div class="interval-control"><span>Interval</span><div class="segment-group">{#each [1, 2, 3, 4] as seconds}<button class:active={settings.activeScanIntervalMs === seconds * 1000} onclick={() => setIntervalSeconds(seconds)}>{seconds}s</button>{/each}</div></div>
             <div class="button-row">
-              <button onclick={clearRegion} disabled={!captureRegion}>Clear Region</button>
-              <button onclick={() => refreshCapturePreview(true)} disabled={!captureRegion || capturePreviewLoading}>{capturePreviewLoading ? 'Refreshing...' : 'Refresh Preview'}</button>
+              <button class="danger-action" onclick={confirmRegionReset} disabled={!captureRegion}>Reset OCR Region</button>
+              <button onclick={showCapturePreview} disabled={!captureRegion || capturePreviewLoading}>{capturePreviewLoading ? 'Refreshing...' : 'Open Preview'}</button>
             </div>
             <div class="capture-preview-card">
               <div><strong>Capture Preview</strong>{#if captureRegion}<span>{captureRegion.width}x{captureRegion.height} saved region</span>{/if}</div>
@@ -1449,49 +1484,6 @@
                 <img class="capture-preview" src={capturePreviewUrl} alt="Live preview of the saved capture region" />
               {:else}
                 <p>{capturePreviewError ?? 'Loading saved region preview…'}</p>
-              {/if}
-            </div>
-          </div>
-        {/if}
-      </section>
-
-      <section class="settings-section">
-        <button class="accordion-header" class:open={openSettingsSection === 'overlay'} aria-expanded={openSettingsSection === 'overlay'} aria-controls="settings-overlay" onclick={() => openSettings('overlay')}>
-          <span class="accordion-heading"><strong>Overlay</strong><small>Configure display, positioning and HUD behavior.</small></span>
-          <span class="accordion-indicator" aria-hidden="true"></span>
-        </button>
-        {#if openSettingsSection === 'overlay'}
-          <div class="accordion-body" id="settings-overlay">
-            <div class="button-row">
-              <button class:active={overlaySetupMode} onclick={toggleOverlaySetupMode}>{overlaySetupMode ? 'Lock Overlay' : 'Unlock Overlay'}</button>
-              <button onclick={resetOverlayPosition}>Reset Position</button>
-            </div>
-            <div class="appearance-grid">
-              <label>Text color <input type="color" bind:value={settings.overlayTextColor} onchange={persistSettings} /></label>
-              <label>Background <input type="color" bind:value={settings.overlayBackgroundColor} onchange={persistSettings} /></label>
-              <label>Accent <input type="color" bind:value={settings.overlayAccentColor} onchange={persistSettings} /></label>
-              <label>Opacity <strong>{Math.round(settings.overlayOpacity * 100)}%</strong><input type="range" min="0" max="1" step="0.05" bind:value={settings.overlayOpacity} onchange={persistSettings} /></label>
-              <label>Text size <strong>{settings.overlayFontSize}px</strong><input type="range" min="11" max="20" step="1" bind:value={settings.overlayFontSize} onchange={persistSettings} /></label>
-              <label>Result lifetime <strong>{settings.overlayResultLifetimeSeconds}s</strong><input type="range" min="5" max="120" step="5" bind:value={settings.overlayResultLifetimeSeconds} onchange={persistSettings} /></label>
-              <label class="toggle"><input type="checkbox" bind:checked={settings.overlayHighContrast} onchange={persistSettings} /><span></span> High contrast</label>
-              <label class="toggle"><input type="checkbox" bind:checked={settings.overlayCompactMode} onchange={persistSettings} /><span></span> Compact mode</label>
-              <label class="toggle"><input type="checkbox" bind:checked={settings.returnSalvageResults} onchange={applyResultSettings} /><span></span> Salvage</label>
-              <label class="toggle"><input type="checkbox" bind:checked={settings.includeFpsRocResults} onchange={applyResultSettings} /><span></span> FPS/ROC</label>
-              <label class="toggle"><input type="checkbox" bind:checked={settings.showComposition} onchange={applyResultSettings} /><span></span> Show Composition</label>
-              <label class="toggle"><input type="checkbox" bind:checked={settings.showScannedValueOnOverlay} onchange={persistSettings} /><span></span> Signature Value</label>
-              <label class="toggle"><input type="checkbox" bind:checked={settings.onlyShowSolvedResults} onchange={applyResultSettings} /><span></span> Only solved captures in overlay</label>
-            </div>
-            <p class="hint">Shows the Scintel trace materials present in the solved primary material, including published percent ranges.</p>
-            <div class="overlay-preview" style={`--preview-text:${settings.overlayTextColor};--preview-bg:${settings.overlayBackgroundColor};--preview-accent:${settings.overlayAccentColor};--preview-opacity:${settings.overlayOpacity};--preview-size:${settings.overlayFontSize}px`}>
-              <small>Overlay Preview</small>
-              <p>
-                {#if settings.showScannedValueOnOverlay}<strong>3840</strong><span>— {materialLabel(mockOverlayMaterials().primary)}</span>
-                {:else}<span>{materialLabel(mockOverlayMaterials().primary)}</span>{/if}
-              </p>
-              {#if settings.showComposition && mockOverlayMaterials().compositionProfile?.entries.length}
-                {#each mockOverlayMaterials().compositionProfile?.entries ?? [] as entry}
-                  <span>{entry.displayName} {compositionPercent(entry)}</span>
-                {/each}
               {/if}
             </div>
           </div>

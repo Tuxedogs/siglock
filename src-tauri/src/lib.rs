@@ -431,6 +431,8 @@ struct AppStateInner {
     active_scan_enabled: bool,
     /// Current visibility of the dedicated overlay window
     overlay_visible: bool,
+    /// A deliberate Show/Hide choice takes precedence over automatic scan visibility.
+    overlay_visibility_override: Option<bool>,
     overlay_setup_mode: bool,
     /// Current OCR region (None = not set)
     region: Option<ScanRegion>,
@@ -473,6 +475,7 @@ fn default_state() -> AppStateInner {
     AppStateInner {
         active_scan_enabled: false, // SAFETY: always start OFF
         overlay_visible: true,
+        overlay_visibility_override: None,
         overlay_setup_mode: false,
         region: None,
         active_ship: ShipId::default(),
@@ -945,20 +948,19 @@ async fn toggle_overlay_visibility(
 ) -> Result<bool, String> {
     if let Some(window) = app.get_webview_window("overlay") {
         let currently_visible = window.is_visible().unwrap_or(false);
-        let active_scan_enabled = state.lock().unwrap().active_scan_enabled;
-
-        if currently_visible && !active_scan_enabled {
-            window.hide().map_err(|e| e.to_string())?;
-            log_window_lifecycle(&app, "overlay", "hide", "overlay_update");
-        } else {
+        let target_visible = !currently_visible;
+        if target_visible {
             window.set_always_on_top(true).map_err(|e| e.to_string())?;
             window.show().map_err(|e| e.to_string())?;
             log_window_lifecycle(&app, "overlay", "show", "overlay_update");
+        } else {
+            window.hide().map_err(|e| e.to_string())?;
+            log_window_lifecycle(&app, "overlay", "hide", "overlay_update");
         }
-        let visible = window
-            .is_visible()
-            .unwrap_or(active_scan_enabled || !currently_visible);
-        state.lock().unwrap().overlay_visible = visible;
+        let visible = window.is_visible().unwrap_or(target_visible);
+        let mut app_state = state.lock().unwrap();
+        app_state.overlay_visibility_override = Some(target_visible);
+        app_state.overlay_visible = visible;
         let _ = app.emit("overlay-visibility-changed", visible);
         Ok(visible)
     } else {
@@ -1083,20 +1085,22 @@ async fn toggle_active_scan(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<bool, String> {
-    let (enabled, had_region, interval) = {
+    let (enabled, had_region, interval, overlay_override) = {
         let mut s = state.lock().unwrap();
         s.active_scan_enabled = !s.active_scan_enabled;
         (
             s.active_scan_enabled,
             s.region.is_some(),
             s.scan_interval_ms,
+            s.overlay_visibility_override,
         )
     };
 
     let _ = app.emit("active-scan-toggled", enabled);
 
     if enabled {
-        if let Some(window) = app.get_webview_window("overlay") {
+        if overlay_override != Some(false) {
+          if let Some(window) = app.get_webview_window("overlay") {
             window
                 .set_always_on_top(true)
                 .map_err(|error| error.to_string())?;
@@ -1104,6 +1108,7 @@ async fn toggle_active_scan(
             state.lock().unwrap().overlay_visible = true;
             let _ = app.emit("overlay-visibility-changed", true);
             log_window_lifecycle(&app, "overlay", "show", "active_scan");
+          }
         }
         if had_region {
             start_active_scan_timer(app.clone(), state.inner().clone(), interval);
@@ -2029,12 +2034,8 @@ fn register_default_hotkeys(app: &tauri::AppHandle) -> Result<(), Box<dyn std::e
         .on_shortcut(show_hide_shortcut, move |app, _shortcut, event| {
             if event.state() == ShortcutState::Pressed {
                 if let Some(window) = app.get_webview_window("overlay") {
-                    let active_scan_enabled = app
-                        .state::<AppState>()
-                        .lock()
-                        .map(|state| state.active_scan_enabled)
-                        .unwrap_or(false);
-                    if window.is_visible().unwrap_or(false) && !active_scan_enabled {
+                    let target_visible = !window.is_visible().unwrap_or(false);
+                    if !target_visible {
                         let _ = window.hide();
                         log_window_lifecycle(app, "overlay", "hide", "overlay_update");
                     } else {
@@ -2044,6 +2045,7 @@ fn register_default_hotkeys(app: &tauri::AppHandle) -> Result<(), Box<dyn std::e
                     }
                     let visible = window.is_visible().unwrap_or(false);
                     if let Ok(mut state) = app.state::<AppState>().lock() {
+                        state.overlay_visibility_override = Some(target_visible);
                         state.overlay_visible = visible;
                     }
                     let _ = app.emit("overlay-visibility-changed", visible);

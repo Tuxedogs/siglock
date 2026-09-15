@@ -15,11 +15,10 @@ assert.match(page, /getSignatures\(\)\.materials/, 'Minables / Materials must en
 assert.match(page, /toggleWatch\(row\.material\)/, 'Every canonical row must support watch state');
 assert.ok(names.includes('Savrilium'));
 
-const aliases = { Aluminium: 'Aluminum', Heph: 'Hephaestanite', Ice: 'Raw Ice' };
-const withoutPublishedLocations = names.filter((name) => {
-  const locationKey = aliases[name] ?? name;
-  return !(locationKey in locations.locations);
-});
-assert.ok(withoutPublishedLocations.includes('Savrilium'), 'Savrilium currently has no separate location row and must still remain visible');
+const mineableNames = signatures.filter((entry) => entry.category === 'Mineable').map((entry) => entry.materialName);
+const withoutPublishedLocations = mineableNames.filter((name) => !(name in locations.locations));
+assert.deepEqual(withoutPublishedLocations, [], 'Every recognized mineable must retain its canonical availability row');
+assert.ok(locations.locations.Savrilium.includes('GlaciemRing'), 'Savrilium must retain its published Nyx availability');
+assert.ok(locations.locations.Bexalite.includes('CRU-L1'), 'Bexalite must retain its published Stanton availability');
 
 console.log(`Canonical material coverage checks passed (${names.length} recognition profiles; ${withoutPublishedLocations.length} without location rows).`);

@@ -1,9 +1,7 @@
 import rawMaterialLocations from './material-locations.json';
 import { canonicalMaterialKey } from './rockCompositions';
 
-export type SigLockLocation =
-  | 'daymar' | 'yela' | 'cellin' | 'aberdeen' | 'lyria' | 'wala'
-  | 'calliope' | 'clio' | 'euterpe' | 'ariel' | 'magda' | 'ita';
+export type SigLockLocation = string;
 
 export type MinableReference = {
   material: string;
@@ -37,7 +35,7 @@ export function locationsForMaterial(material: string): SigLockLocation[] {
 export function materialValidAtLocation(material: string, location?: string | null): boolean {
   if (!location) return true;
   const locations = locationsForMaterial(material);
-  return locations.includes(location.toLowerCase() as SigLockLocation);
+  return locations.some((candidate) => canonicalLocationKey(candidate) === canonicalLocationKey(location));
 }
 
 export function getMinableReference(): MinableReference[] {
@@ -45,6 +43,9 @@ export function getMinableReference(): MinableReference[] {
 }
 
 export function locationLabel(location: string) {
-  const labels: Record<string, string> = { 'cru-l1': 'CRU-L1' };
-  return labels[location] ?? location.charAt(0).toUpperCase() + location.slice(1);
+  return location;
+}
+
+function canonicalLocationKey(location: string) {
+  return location.trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
 }
