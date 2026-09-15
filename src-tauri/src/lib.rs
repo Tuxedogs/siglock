@@ -1,6 +1,7 @@
 use base64::engine::general_purpose;
 use base64::Engine;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::fs::OpenOptions;
 use std::io::{Cursor, Write};
 #[cfg(windows)]
@@ -427,6 +428,8 @@ struct AppStateInner {
     overlay_setup_mode: bool,
     /// Current OCR region (None = not set)
     region: Option<ScanRegion>,
+    /// Ship profile whose region is currently active.
+    active_ship: ShipId,
     /// Last observed signature and source
     last_value: Option<u32>,
     last_source: Option<String>,
@@ -439,7 +442,7 @@ struct AppStateInner {
 }
 
 type AppState = Arc<Mutex<AppStateInner>>;
-type NativeSettingsState = Arc<Mutex<NativeSettings>>;
+type NativeSettingsState = Arc<Mutex<NativeSettingsCache>>;
 
 /// Controller for the single active scan timer task
 struct ActiveScanController {
@@ -464,6 +467,7 @@ fn default_state() -> AppStateInner {
         overlay_visible: true,
         overlay_setup_mode: false,
         region: None,
+        active_ship: ShipId::default(),
         last_value: None,
         last_source: None,
         hotkey_show_hide: "Ctrl+Shift+M".to_string(),
@@ -473,10 +477,80 @@ fn default_state() -> AppStateInner {
     }
 }
 
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "lowercase")]
+pub enum ShipId {
+    Golem,
+    Prospector,
+    Mole,
+}
+
+impl Default for ShipId {
+    fn default() -> Self {
+        Self::Prospector
+    }
+}
+
+impl ShipId {
+    fn all() -> [Self; 3] {
+        [Self::Golem, Self::Prospector, Self::Mole]
+    }
+}
+
 #[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq, Eq)]
+#[serde(default, rename_all = "camelCase")]
+struct ShipProfile {
+    scan_region: Option<ScanRegion>,
+    overlay_position: Option<(i32, i32)>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(default, rename_all = "camelCase")]
 struct NativeSettings {
+    version: u8,
+    active_ship: ShipId,
+    ship_profiles: BTreeMap<ShipId, ShipProfile>,
+    game_log_path: Option<PathBuf>,
+}
+
+impl Default for NativeSettings {
+    fn default() -> Self {
+        let ship_profiles = ShipId::all()
+            .into_iter()
+            .map(|ship| (ship, ShipProfile::default()))
+            .collect();
+        Self {
+            version: 2,
+            active_ship: ShipId::default(),
+            ship_profiles,
+            game_log_path: None,
+        }
+    }
+}
+
+impl NativeSettings {
+    fn active_profile(&self) -> &ShipProfile {
+        self.ship_profiles
+            .get(&self.active_ship)
+            .expect("default ship profiles are always populated")
+    }
+
+    fn active_profile_mut(&mut self) -> &mut ShipProfile {
+        self.ship_profiles.entry(self.active_ship).or_default()
+    }
+}
+
+#[derive(Deserialize)]
+struct LegacyNativeSettings {
     region: Option<ScanRegion>,
     overlay_position: Option<(i32, i32)>,
+}
+
+#[derive(Default)]
+struct NativeSettingsCache {
+    value: NativeSettings,
+    /// Passive window events must never write the default cache before startup hydration.
+    persistence_ready: bool,
 }
 
 fn validate_scan_region(region: &ScanRegion) -> Result<(), String> {
@@ -489,14 +563,39 @@ fn validate_scan_region(region: &ScanRegion) -> Result<(), String> {
     Ok(())
 }
 
-fn load_native_settings(app: &tauri::AppHandle) -> NativeSettings {
-    let Ok(path) = get_native_settings_path(app) else {
-        return NativeSettings::default();
-    };
-    std::fs::read_to_string(path)
-        .ok()
-        .and_then(|value| serde_json::from_str(&value).ok())
-        .unwrap_or_default()
+fn parse_native_settings(value: &str) -> Result<(NativeSettings, bool), String> {
+    let json: serde_json::Value = serde_json::from_str(value).map_err(|error| error.to_string())?;
+    if json.get("shipProfiles").is_some() || json.get("version").is_some() {
+        let mut settings: NativeSettings =
+            serde_json::from_value(json).map_err(|error| error.to_string())?;
+        for ship in ShipId::all() {
+            settings.ship_profiles.entry(ship).or_default();
+        }
+        settings.version = 2;
+        return Ok((settings, false));
+    }
+
+    let legacy: LegacyNativeSettings =
+        serde_json::from_value(json).map_err(|error| error.to_string())?;
+    let mut settings = NativeSettings::default();
+    let profile = settings.active_profile_mut();
+    profile.scan_region = legacy.region;
+    profile.overlay_position = legacy.overlay_position;
+    Ok((settings, true))
+}
+
+fn load_native_settings_path(path: &Path) -> Result<(NativeSettings, bool), String> {
+    match std::fs::read_to_string(path) {
+        Ok(value) => parse_native_settings(&value),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            Ok((NativeSettings::default(), false))
+        }
+        Err(error) => Err(format!("Failed to read {}: {}", path.display(), error)),
+    }
+}
+
+fn load_native_settings(app: &tauri::AppHandle) -> Result<(NativeSettings, bool), String> {
+    load_native_settings_path(&get_native_settings_path(app)?)
 }
 
 fn save_native_settings(app: &tauri::AppHandle, settings: &NativeSettings) -> Result<(), String> {
@@ -530,19 +629,22 @@ fn save_region(
     native_settings: &NativeSettingsState,
     region: Option<ScanRegion>,
 ) -> Result<(), String> {
-    let mut settings = native_settings.lock().unwrap();
-    let mut next_settings = settings.clone();
-    next_settings.region = region.clone();
+    let mut cache = native_settings.lock().unwrap();
+    if !cache.persistence_ready {
+        return Err("Native settings were not safely loaded; refusing to replace them.".to_string());
+    }
+    let mut next_settings = cache.value.clone();
+    next_settings.active_profile_mut().scan_region = region.clone();
     save_native_settings(app, &next_settings)?;
-    let persisted = load_native_settings(app);
-    let saved_ok = persisted.region == region;
+    let (persisted, _) = load_native_settings(app)?;
+    let saved_ok = persisted.active_profile().scan_region == region;
     println!(
         "[SigLock] region persistence {} after save: {:?}",
         if saved_ok { "verified" } else { "FAILED" },
         region
     );
     if saved_ok {
-        *settings = next_settings;
+        cache.value = next_settings;
         Ok(())
     } else {
         Err("Region save verification failed.".to_string())
@@ -554,9 +656,27 @@ fn save_overlay_position(
     native_settings: &NativeSettingsState,
     position: PhysicalPosition<i32>,
 ) -> Result<(), String> {
-    let mut settings = native_settings.lock().unwrap();
-    settings.overlay_position = Some((position.x, position.y));
-    save_native_settings(app, &settings)
+    let mut cache = native_settings.lock().unwrap();
+    let Some(next_settings) = settings_with_overlay_position(&cache, (position.x, position.y)) else {
+        return Ok(());
+    };
+    save_native_settings(app, &next_settings)?;
+    cache.value = next_settings;
+    Ok(())
+}
+
+fn settings_with_overlay_position(
+    cache: &NativeSettingsCache,
+    position: (i32, i32),
+) -> Option<NativeSettings> {
+    if !cache.persistence_ready {
+        // Window creation/move events can arrive before setup hydration. They are
+        // passive events and must never serialize the default cache over user data.
+        return None;
+    }
+    let mut next_settings = cache.value.clone();
+    next_settings.active_profile_mut().overlay_position = Some(position);
+    Some(next_settings)
 }
 
 fn safe_overlay_position(
@@ -847,6 +967,7 @@ fn get_app_state(state: State<'_, AppState>) -> Result<serde_json::Value, String
         "overlay_visible": s.overlay_visible,
         "overlay_setup_mode": s.overlay_setup_mode,
         "has_region": s.region.is_some(),
+        "active_ship": s.active_ship,
         "scan_interval_ms": s.scan_interval_ms,
         "hotkeys": {
             "show_hide": s.hotkey_show_hide,
@@ -857,6 +978,84 @@ fn get_app_state(state: State<'_, AppState>) -> Result<serde_json::Value, String
 }
 
 // ==================== Region Management (persisted) ====================
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ShipProfileSnapshot {
+    active_ship: ShipId,
+    scan_region: Option<ScanRegion>,
+    configured_ships: Vec<ShipId>,
+}
+
+#[tauri::command]
+fn get_ship_profile(native_settings: State<'_, NativeSettingsState>) -> ShipProfileSnapshot {
+    let cache = native_settings.lock().unwrap();
+    ShipProfileSnapshot {
+        active_ship: cache.value.active_ship,
+        scan_region: cache.value.active_profile().scan_region.clone(),
+        configured_ships: ShipId::all()
+            .into_iter()
+            .filter(|ship| {
+                cache
+                    .value
+                    .ship_profiles
+                    .get(ship)
+                    .and_then(|profile| profile.scan_region.as_ref())
+                    .is_some()
+            })
+            .collect(),
+    }
+}
+
+#[tauri::command]
+fn set_active_ship(
+    ship: ShipId,
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    native_settings: State<'_, NativeSettingsState>,
+) -> Result<ShipProfileSnapshot, String> {
+    let (region, overlay_position, configured_ships) = {
+        let mut cache = native_settings.lock().unwrap();
+        if !cache.persistence_ready {
+            return Err("Native settings were not safely loaded; refusing to replace them.".to_string());
+        }
+        let mut next_settings = cache.value.clone();
+        next_settings.active_ship = ship;
+        let profile = next_settings.active_profile().clone();
+        save_native_settings(&app, &next_settings)?;
+        cache.value = next_settings;
+        let configured = ShipId::all()
+            .into_iter()
+            .filter(|candidate| {
+                cache
+                    .value
+                    .ship_profiles
+                    .get(candidate)
+                    .and_then(|value| value.scan_region.as_ref())
+                    .is_some()
+            })
+            .collect::<Vec<_>>();
+        (profile.scan_region, profile.overlay_position, configured)
+    };
+
+    {
+        let mut app_state = state.lock().unwrap();
+        app_state.active_ship = ship;
+        app_state.region = region.clone();
+    }
+    if let (Some(window), Some((x, y))) = (app.get_webview_window("overlay"), overlay_position) {
+        let position = safe_overlay_position(&window, Some((x, y)));
+        window
+            .set_position(Position::Physical(position))
+            .map_err(|error| error.to_string())?;
+    }
+    let _ = app.emit("ship-profile-changed", ship);
+    Ok(ShipProfileSnapshot {
+        active_ship: ship,
+        scan_region: region,
+        configured_ships,
+    })
+}
 
 #[tauri::command]
 async fn set_crop_region(
@@ -1593,8 +1792,9 @@ fn start_scan_mouse_hook(_app: tauri::AppHandle) {}
 #[cfg(test)]
 mod tests {
     use super::{
-        clamp_scan_interval, local_capture_coordinates, scan_mouse_button,
-        write_native_settings_file, NativeSettings, ScanRegion,
+        clamp_scan_interval, local_capture_coordinates, load_native_settings_path,
+        parse_native_settings, scan_mouse_button, settings_with_overlay_position,
+        write_native_settings_file, NativeSettings, NativeSettingsCache, ScanRegion, ShipId,
     };
     #[cfg(windows)]
     use super::{mouse_button_from_message, WM_MBUTTONDOWN, WM_XBUTTONDOWN};
@@ -1658,24 +1858,21 @@ mod tests {
             std::process::id(),
             unique
         ));
-        let first = NativeSettings {
-            region: Some(ScanRegion {
-                x: 10,
-                y: 20,
-                width: 200,
-                height: 50,
-            }),
-            overlay_position: Some((80, 120)),
-        };
-        let second = NativeSettings {
-            region: Some(ScanRegion {
-                x: 2700,
-                y: 140,
-                width: 300,
-                height: 70,
-            }),
-            overlay_position: Some((80, 120)),
-        };
+        let mut first = NativeSettings::default();
+        first.active_profile_mut().scan_region = Some(ScanRegion {
+            x: 10,
+            y: 20,
+            width: 200,
+            height: 50,
+        });
+        first.active_profile_mut().overlay_position = Some((80, 120));
+        let mut second = first.clone();
+        second.active_profile_mut().scan_region = Some(ScanRegion {
+            x: 2700,
+            y: 140,
+            width: 300,
+            height: 70,
+        });
 
         write_native_settings_file(&path, &first).unwrap();
         write_native_settings_file(&path, &second).unwrap();
@@ -1683,6 +1880,71 @@ mod tests {
             serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
         assert_eq!(persisted, second);
 
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn legacy_region_migrates_to_the_default_ship_profile() {
+        let legacy = r#"{
+          "region": { "x": 1247, "y": 517, "width": 82, "height": 26 },
+          "overlay_position": [1424, 456]
+        }"#;
+        let (settings, migrated) = parse_native_settings(legacy).unwrap();
+        assert!(migrated);
+        assert_eq!(settings.version, 2);
+        assert_eq!(settings.active_ship, ShipId::Prospector);
+        assert_eq!(settings.active_profile().scan_region.as_ref().unwrap().x, 1247);
+        assert_eq!(settings.active_profile().overlay_position, Some((1424, 456)));
+    }
+
+    #[test]
+    fn each_ship_profile_retains_its_own_region() {
+        let mut settings = NativeSettings::default();
+        settings.active_profile_mut().scan_region = Some(ScanRegion {
+            x: 10,
+            y: 20,
+            width: 200,
+            height: 50,
+        });
+        settings.active_ship = ShipId::Mole;
+        settings.active_profile_mut().scan_region = Some(ScanRegion {
+            x: 300,
+            y: 400,
+            width: 220,
+            height: 60,
+        });
+        assert_eq!(settings.ship_profiles[&ShipId::Prospector].scan_region.as_ref().unwrap().x, 10);
+        assert_eq!(settings.ship_profiles[&ShipId::Mole].scan_region.as_ref().unwrap().x, 300);
+        assert!(settings.ship_profiles[&ShipId::Golem].scan_region.is_none());
+    }
+
+    #[test]
+    fn passive_overlay_move_cannot_replace_region_before_hydration() {
+        let persisted_region = ScanRegion { x: 10, y: 20, width: 200, height: 50 };
+        let mut settings = NativeSettings::default();
+        settings.active_profile_mut().scan_region = Some(persisted_region.clone());
+        let cache = NativeSettingsCache { value: settings.clone(), persistence_ready: false };
+        assert!(settings_with_overlay_position(&cache, (900, 700)).is_none());
+        assert_eq!(cache.value.active_profile().scan_region, Some(persisted_region));
+    }
+
+    #[test]
+    fn migrated_document_round_trips_without_losing_profiles() {
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "siglock-native-settings-migration-{}-{}.json",
+            std::process::id(), unique
+        ));
+        std::fs::write(&path, r#"{"region":{"x":1,"y":2,"width":80,"height":24},"overlay_position":[3,4]}"#).unwrap();
+        let (settings, migrated) = load_native_settings_path(&path).unwrap();
+        assert!(migrated);
+        write_native_settings_file(&path, &settings).unwrap();
+        let (reloaded, migrated_again) = load_native_settings_path(&path).unwrap();
+        assert!(!migrated_again);
+        assert_eq!(reloaded, settings);
         let _ = std::fs::remove_file(path);
     }
 
@@ -1708,7 +1970,7 @@ mod tests {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let state: AppState = Arc::new(Mutex::new(default_state()));
-    let native_settings: NativeSettingsState = Arc::new(Mutex::new(NativeSettings::default()));
+    let native_settings: NativeSettingsState = Arc::new(Mutex::new(NativeSettingsCache::default()));
     let timer_controller: ActiveScanControllerState =
         Arc::new(Mutex::new(ActiveScanController::default()));
 
@@ -1735,6 +1997,8 @@ pub fn run() {
             toggle_active_scan,
             set_scan_interval,
             get_app_state,
+            get_ship_profile,
+            set_active_ship,
             set_crop_region,
             get_crop_region,
             clear_crop_region,
@@ -1744,15 +2008,44 @@ pub fn run() {
             check_tesseract
         ])
         .setup(move |app| {
-            let loaded_native_settings = load_native_settings(&app.handle());
+            let settings_path = get_native_settings_path(&app.handle())?;
+            let loaded = load_native_settings_path(&settings_path);
+            let (loaded_native_settings, persistence_ready) = match loaded {
+                Ok((settings, migrated)) => {
+                    let ready = if migrated {
+                        match write_native_settings_file(&settings_path, &settings) {
+                            Ok(()) => true,
+                            Err(error) => {
+                                eprintln!("[SigLock] Native settings migration failed: {}", error);
+                                false
+                            }
+                        }
+                    } else {
+                        true
+                    };
+                    (settings, ready)
+                }
+                Err(error) => {
+                    eprintln!("[SigLock] Native settings load failed: {}", error);
+                    // Preserve a malformed document for recovery instead of allowing
+                    // a passive overlay move to silently replace it.
+                    let invalid_path = settings_path.with_extension("invalid.json");
+                    if std::fs::read_to_string(&settings_path).is_ok() {
+                        let _ = std::fs::copy(&settings_path, &invalid_path);
+                    }
+                    (NativeSettings::default(), false)
+                }
+            };
             log_window_lifecycle(&app.handle(), "main", "create", "startup");
             log_window_lifecycle(&app.handle(), "main", "show", "startup");
             {
                 let mut cache = native_settings.lock().unwrap();
-                *cache = loaded_native_settings.clone();
+                cache.value = loaded_native_settings.clone();
+                cache.persistence_ready = persistence_ready;
             }
             if let Ok(mut current_state) = state.lock() {
-                current_state.region = loaded_native_settings.region.clone();
+                current_state.active_ship = loaded_native_settings.active_ship;
+                current_state.region = loaded_native_settings.active_profile().scan_region.clone();
             }
             if let Some(overlay) = app.get_webview_window("overlay") {
                 log_window_lifecycle(&app.handle(), "overlay", "create", "startup");
@@ -1760,7 +2053,7 @@ pub fn run() {
                 let _ = overlay.set_always_on_top(true);
                 let _ = overlay.set_ignore_cursor_events(true);
                 let position =
-                    safe_overlay_position(&overlay, loaded_native_settings.overlay_position);
+                    safe_overlay_position(&overlay, loaded_native_settings.active_profile().overlay_position);
                 let _ = overlay.set_position(Position::Physical(position));
                 log_window_lifecycle(&app.handle(), "overlay", "set_position", "startup");
             }

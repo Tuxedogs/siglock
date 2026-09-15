@@ -23,7 +23,13 @@
   type Trigger = 'Manual' | 'Active';
   type ScanStatus = 'matched' | 'no match' | 'invalid' | 'failed' | 'skipped';
   type ShortcutAction = 'manual' | 'auto';
+  type ShipId = 'golem' | 'prospector' | 'mole';
   type ScanRegion = { x: number; y: number; width: number; height: number };
+  type ShipProfileSnapshot = {
+    activeShip: ShipId;
+    scanRegion: ScanRegion | null;
+    configuredShips: ShipId[];
+  };
   type HistoryEntry = {
     id: number;
     timestamp: string;
@@ -89,6 +95,8 @@
   let matches = $state<MatchResult[]>([]);
   let history = $state<HistoryEntry[]>([]);
   let captureRegion = $state<ScanRegion | null>(null);
+  let activeShip = $state<ShipId>('prospector');
+  let configuredShips = $state<ShipId[]>([]);
   let regionLoadComplete = $state(false);
   let activeScanOn = $state(false);
   let overlayVisible = $state(true);
@@ -254,8 +262,10 @@
 
   async function loadSavedRegion(startup = false) {
     try {
-      const region = await invoke<ScanRegion | null>('get_crop_region');
-      captureRegion = isValidRegion(region) ? region : null;
+      const profile = await invoke<ShipProfileSnapshot>('get_ship_profile');
+      activeShip = profile.activeShip;
+      configuredShips = profile.configuredShips;
+      captureRegion = isValidRegion(profile.scanRegion) ? profile.scanRegion : null;
     } catch {
       captureRegion = null;
     } finally {
@@ -266,6 +276,28 @@
           : '[SigLock] startup region load: no valid saved region');
       }
     }
+  }
+
+  async function switchShip(ship: ShipId) {
+    if (ship === activeShip) return;
+    try {
+      const profile = await invoke<ShipProfileSnapshot>('set_active_ship', { ship });
+      activeShip = profile.activeShip;
+      configuredShips = profile.configuredShips;
+      captureRegion = isValidRegion(profile.scanRegion) ? profile.scanRegion : null;
+      capturePreviewUrl = null;
+      capturePreviewError = null;
+      matches = [];
+      scannerStatus = captureRegion
+        ? `${shipLabel(ship)} profile loaded`
+        : `${shipLabel(ship)} needs a capture region`;
+    } catch (error) {
+      scannerStatus = `Ship profile switch failed: ${String(error)}`;
+    }
+  }
+
+  function shipLabel(ship: ShipId) {
+    return ship === 'mole' ? 'MOLE' : ship[0].toUpperCase() + ship.slice(1);
   }
 
   function skippedEntry(trigger: Trigger, material: string): Omit<HistoryEntry, 'id' | 'repeatCount'> {
@@ -836,6 +868,7 @@
   async function clearRegion() {
     await invoke('clear_crop_region');
     captureRegion = null;
+    configuredShips = configuredShips.filter((ship) => ship !== activeShip);
     capturePreviewUrl = null;
     capturePreviewError = null;
     regionLoadComplete = true;
@@ -1010,6 +1043,7 @@
     unlisteners.push(await listen<ScanRegion>('crop-region-updated', (event) => {
       if (isValidRegion(event.payload)) {
         captureRegion = event.payload;
+        if (!configuredShips.includes(activeShip)) configuredShips = [...configuredShips, activeShip];
         regionLoadComplete = true;
         scannerStatus = 'Capture region saved';
         if (settingsOpen) void refreshCapturePreview();
@@ -1108,6 +1142,15 @@
   </header>
 
   <nav class="system-filter" aria-label="Signature system filter">
+    <span>Ship</span>
+    {#each ['golem', 'prospector', 'mole'] as ship}
+      <button
+        class:active={activeShip === ship}
+        class:configured={configuredShips.includes(ship as ShipId)}
+        onclick={() => switchShip(ship as ShipId)}
+      >{shipLabel(ship as ShipId)}</button>
+    {/each}
+    <i aria-hidden="true"></i>
     <span>System</span>
     {#each ['All', 'Stanton', 'Pyro', 'Nyx'] as system}
       <button class:active={settings.selectedSystemFilter === system} onclick={() => setSystemFilter(system as SystemFilter)}>{system}</button>
