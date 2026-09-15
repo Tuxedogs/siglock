@@ -166,6 +166,11 @@ fn ooc_token(line: &str) -> Option<&str> {
     Some(&tail[..len])
 }
 
+fn quoted_actor(line: &str) -> Option<&str> {
+    let value = &line[line.find("Actor '")? + "Actor '".len()..];
+    Some(&value[..value.find('\'')?])
+}
+
 pub fn normalize_location(identifier: &str) -> Option<String> {
     let lower = identifier.to_ascii_lowercase();
     let known = [
@@ -228,6 +233,9 @@ impl LogClassifier {
     }
 
     fn capture_player_handle(&mut self, line: &str) {
+        if !line.contains("Login") {
+            return;
+        }
         if let Some(start) = line.find("Handle[") {
             let value = &line[start + 7..];
             if let Some(end) = value.find(']') {
@@ -249,6 +257,11 @@ impl LogClassifier {
         let source = if line.contains("<[ActorState]")
             && line.contains("Actor '")
             && line.contains("to zone 'OOC_")
+            && self
+                .status
+                .player_handle
+                .as_deref()
+                .is_some_and(|player| quoted_actor(line) == Some(player))
         {
             Some("player actor zone transition")
         } else if line.contains("<FatalCollision>")
@@ -489,6 +502,7 @@ mod tests {
     #[test]
     fn generic_celestial_dump_does_not_change_location() {
         let mut classifier = LogClassifier::default();
+        classifier.process_line("User Login Success - Handle[Tux-Actual] - Time[1]");
         classifier.process_line("<[ActorState] Dead> Actor 'Tux-Actual' [42] ejected from zone 'Ship' [1] to zone 'OOC_Stanton_2b_Daymar' [2]");
         classifier.process_line("planet cells: 0 meshes: 0 name: OOC_Stanton_2b_Daymar");
         classifier.process_line("planet cells: 0 meshes: 0 name: OOC_Stanton_3a_Lyria");
@@ -501,6 +515,7 @@ mod tests {
     #[test]
     fn player_actor_transition_is_high_confidence() {
         let mut classifier = LogClassifier::default();
+        classifier.process_line("User Login Success - Handle[Tux-Actual] - Time[1]");
         classifier.process_line("<[ActorState] Dead> Actor 'Tux-Actual' [42] ejected from zone 'Ship' [1] to zone 'OOC_Stanton_2a_Cellin' [2]");
         assert_eq!(
             classifier.status().current_location.as_deref(),
@@ -510,6 +525,14 @@ mod tests {
             classifier.status().location_confidence.as_deref(),
             Some("high")
         );
+    }
+
+    #[test]
+    fn unrelated_actor_transition_does_not_change_player_location() {
+        let mut classifier = LogClassifier::default();
+        classifier.process_line("User Login Success - Handle[Tux-Actual] - Time[1]");
+        classifier.process_line("<[ActorState] Dead> Actor 'Pirate-NPC' [99] ejected from zone 'Ship' [1] to zone 'OOC_Stanton_3a_Lyria' [2]");
+        assert_eq!(classifier.status().current_location, None);
     }
 
     #[test]
