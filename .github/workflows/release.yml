@@ -53,11 +53,13 @@ jobs:
           tagName: v__VERSION__
           releaseName: ${{ steps.release_meta.outputs.title }}
           releaseBody: |
-            SigLock v0.1.0 Beta 5 open beta build.
+            SigLock v0.1.0 Beta 6 open beta build.
 
-            This release overhauls the mining workspace, adds per-ship OCR regions
-            and overlay-position persistence, expands the location-aware Minables
-            index and watch list, and improves multi-monitor capture reliability.
+            This release restores the Overlay workspace HUD preview, refines the
+            dashboard's smallest labels, and updates the SigLock by Tux branding.
+
+            See the accompanying release notes for the known Settings clipping and
+            overlay background-opacity limitations.
 
             Download the Windows setup executable below.
           releaseDraft: false

@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.1.0-beta.6
+
+### Changed
+
+- Updated the sidebar lockup with the supplied SigLock by Tux PNG logo.
+- Refined the OCR capture label and sidebar build footer to a more compact size.
+
+### Fixed
+
+- Restored the visible HUD preview in the Overlay workspace while retaining its live style bindings.
+
+### Known Issues
+
+- Settings categories can clip at constrained window sizes.
+- Overlay background opacity currently fades before the far edge and does not fill the entire overlay surface.
+
 ## v0.1.0-beta.5
 
 ### Added

@@ -2,9 +2,9 @@
 
 SigLock is a lightweight desktop overlay for Star Citizen mining. It watches a user-selected scan region, reads visible scan signature values with OCR, and matches those values against a local signature table to identify likely mineable materials and rock counts.
 
-The current open-beta release is **v0.1.0-beta.5**. It is a beta build and
+The current open-beta release is **v0.1.0-beta.6**. It is a beta build and
 should not be treated as a stable build. The Windows installer is named
-`SigLock_0.1.0-beta.5_x64-setup.exe`.
+`SigLock_0.1.0-beta.6_x64-setup.exe`.
 
 ## Public beta safety and privacy
 
