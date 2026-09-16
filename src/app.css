@@ -29,7 +29,7 @@ h1,h2,h3,p { margin-top:0; } h1,h2,h3 { color:#dff2f6; }
 .side-rail { position:relative; z-index:2; isolation:isolate; display:flex; flex-direction:column; min-width:0; overflow:hidden; padding:19px 10px 16px; background:#06111d; border-right:1px solid rgba(47,102,135,.58); box-shadow:12px 0 45px rgba(0,10,20,.35); }
 .side-rail::before { position:absolute; inset:0; z-index:-1; background:url('/siglock-sidebar-golem-in-nyx.png') center bottom / 575px auto no-repeat; -webkit-mask-image:linear-gradient(180deg,transparent 0%,transparent 45%,rgba(0,0,0,.04) 52%,rgba(0,0,0,.22) 60%,rgba(0,0,0,.62) 69%,#000 78%,#000 100%); mask-image:linear-gradient(180deg,transparent 0%,transparent 45%,rgba(0,0,0,.04) 52%,rgba(0,0,0,.22) 60%,rgba(0,0,0,.62) 69%,#000 78%,#000 100%); content:""; }
 .brand-lockup { display:flex; align-items:center; gap:9px; min-height:72px; padding:2px 8px 18px; }
-.brand-lockup img { width:39px; height:39px; object-fit:contain; filter:drop-shadow(0 0 9px rgba(101,150,183,.28)); }
+.brand-lockup img { width:46px; height:46px; object-fit:contain; filter:drop-shadow(0 0 9px rgba(101,150,183,.28)); }
 .brand-lockup strong { display:block; color:#eefcff; font-size:22px; letter-spacing:-.03em; }
 .brand-lockup span { display:block; margin-top:5px; color:#7892a3; font-size:7px; font-weight:700; letter-spacing:.25em; line-height:1.55; text-transform:uppercase; }
 .side-rail nav { display:grid; gap:3px; margin-top:13px; }
@@ -96,6 +96,7 @@ h1,h2,h3,p { margin-top:0; } h1,h2,h3 { color:#dff2f6; }
 .results-empty>span { color:#6596b7; }
 .activity-summary button { color:#91bed8; }
 .overlay-stage { background:url('/siglock-overlay-preview-background.png') center / cover no-repeat; border-color:rgba(47,102,135,.42); }
+.overlay-settings-preview-stage { min-height:150px; margin:0; }
 .hud-preview { border-top-color:color-mix(in srgb,var(--preview-accent,#477b9e) 65%,transparent); border-left-color:color-mix(in srgb,var(--preview-accent,#477b9e) 48%,transparent); }
 .hud-preview header { color:var(--preview-accent,#91bed8); border-bottom-color:color-mix(in srgb,var(--preview-accent,#477b9e) 25%,transparent); }
 .eyebrow { color:#91bed8; border-left-color:#6596b7; }
@@ -109,4 +110,5 @@ h1,h2,h3,p { margin-top:0; } h1,h2,h3 { color:#dff2f6; }
 :is(.rail-footer,.rail-footer b,.drag-title>span,.connection-state,.profile-label small,.profile-bar>p,.system-selector button,.module header small,.workspace-heading small,.settings-header small,.diagnostic-feed header small,.region-entry span,.region-entry>b,.profile-region-list>div,.state-dot,.auto-control small,.scan-metrics span,.scanner-module footer>span,.overlay-dashboard footer>span,.watch-list>button,.watch-list b,.compact-empty,.finds-module>header>span,.material-results span,.material-results b,.results-empty p,.activity-summary>span,.instrument-title,.instrument-title b,.region-readout dt,.settings-header p,.accordion-heading small,.hint,.field,.interval-control,.appearance-grid label,.capture-preview-card p,.capture-preview-card span,.overlay-preview>small,.settings-footer,.filter-group button,.history-row strong,.history-row small,.status,pre) { font-size:11px; }
 :is(.eyebrow,.material-results strong,.preview-empty,.table-head,.shortcut-row strong,.release-list ul) { font-size:12px; }
 :is(.ship-selector button,.module>header button,.module>footer button,.module-copy,.region-entry strong,.scan-metrics strong,.results-empty strong,.page-intro,.table-toolbar span,.minables-watchlist,.watch-action,.accordion-heading strong) { font-size:13px; }
+.rail-footer,.rail-footer b,.module header small { font-size:9px; }
 @media(min-width:821px) { .watch-list { min-height:87px; } }
