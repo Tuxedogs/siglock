@@ -14,30 +14,34 @@ const signatureCandidates = signatures
 assert.equal(signatureCandidates[0].material, 'Aslarite');
 assert.deepEqual(signatureCandidates.slice(1).map((candidate) => candidate.material), ['Laranite', 'Titanium']);
 
-const aslariteVariants = compositions.variants.filter((variant) => variant.primaryMaterial === 'Aslarite');
-assert.equal(aslariteVariants.length, 1);
-const compositionRows = aslariteVariants[0].compositionRows;
-assert.equal(compositionRows.length, 4);
-assert.equal(compositionRows.filter((row) => row.material === 'Aslarite').length, 2);
+assert.equal(compositions.schemaVersion, 2);
+assert.match(compositions.source, /Scintel normalized mining contract/);
+assert.equal(compositions.profiles.length, signatures.filter((entry) => entry.category === 'Mineable').length);
 
-const secondaryMaterials = [...new Set(compositionRows
-  .filter((row) => row.material !== 'Aslarite')
-  .map((row) => row.material))];
-assert.deepEqual(secondaryMaterials, ['Agricium', 'Titanium']);
-assert.ok(!secondaryMaterials.includes('Laranite'));
-
-assert.deepEqual(compositionRows.map((row) => ({
-  material: row.material,
-  densityRange: row.densityRange,
-  qualityRange: row.qualityRange,
+const aslariteProfile = compositions.profiles.find((profile) => profile.primaryMaterial === 'Aslarite');
+assert.equal(aslariteProfile.sourceMaterial, 'Aslarite');
+assert.deepEqual(aslariteProfile.systems, ['Pyro', 'Stanton']);
+assert.deepEqual(aslariteProfile.traces.map((trace) => ({
+  material: trace.material,
+  percentRange: trace.percentRange,
 })), [
-  { material: 'Aslarite', densityRange: [2.82, 6.82], qualityRange: [501, 1000] },
-  { material: 'Aslarite', densityRange: [39.18, 83.18], qualityRange: [245, 490] },
-  { material: 'Agricium', densityRange: [2, 5], qualityRange: [395, 789] },
-  { material: 'Titanium', densityRange: [2, 5], qualityRange: [395, 789] },
+  { material: 'Agricium', percentRange: [2, 5] },
+  { material: 'Titanium', percentRange: [2, 5] },
 ]);
+assert.ok(!aslariteProfile.traces.some((trace) => trace.material === 'Aslarite'));
+assert.ok(!aslariteProfile.traces.some((trace) => trace.material === 'Laranite'));
 
-assert.equal(compositions.variants.filter((variant) => variant.primaryMaterial === 'Taranite').length, 1);
-assert.equal(compositions.variants.filter((variant) => variant.primaryMaterial === 'No Such Material').length, 0);
+const agriciumProfile = compositions.profiles.find((profile) => profile.primaryMaterial === 'Agricium');
+assert.deepEqual(agriciumProfile.traces.map((trace) => trace.material), ['Aslarite', 'Titanium']);
 
-console.log('Rock composition acceptance checks passed.');
+const iceProfile = compositions.profiles.find((profile) => profile.primaryMaterial === 'Ice');
+assert.equal(iceProfile.sourceMaterial, 'Raw Ice');
+assert.deepEqual(iceProfile.traces, []);
+
+const savrilium = signatures.find((entry) => entry.materialName === 'Savrilium');
+assert.ok(savrilium, 'Savrilium must use the user-facing spelling in the canonical signature inventory');
+assert.equal(savrilium.signatures[0].value, 3200);
+const savriliumProfile = compositions.profiles.find((profile) => profile.primaryMaterial === 'Savrilium');
+assert.equal(savriliumProfile?.sourceMaterial, 'Savrilium');
+
+console.log('Scintel trace-material composition acceptance checks passed.');

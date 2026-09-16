@@ -12,6 +12,10 @@ This release opens SigLock to public beta testing with clearer scan results, sys
 
 ## Reliability fixes
 
+- Fixed a native-settings race that could wipe a saved capture region after restart; saved regions now persist atomically and verify immediately after save.
+- Improved OCR normalization and added detailed scan diagnostics to reduce unexpected Unknown or invalid results.
+- Replaced Secondary Materials with true Rock Composition so the overlay shows the solved primary material's composition profile instead of signature-sharing candidates.
+
 - Saved region state loads and validates before a missing-region state can appear.
 - A paused scanner with a saved region reports “Ready when you are.”
 - Saving or cancelling the picker now has an explicit outcome; Escape keeps the existing region and restores the previous scanner status.

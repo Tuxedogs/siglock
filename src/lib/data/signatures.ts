@@ -9,6 +9,7 @@
 
 import rawSignatures from './signatures.json';
 import { systemsForMaterial } from './rockCompositions';
+import { materialValidAtLocation } from './materialLocations';
 import type { SystemFilter } from '$lib/settings';
 
 export interface SignatureEntry {
@@ -46,11 +47,13 @@ export interface MatchOptions {
   system?: SystemFilter;
   includeSalvage?: boolean;
   includeFpsRoc?: boolean;
+  location?: string | null;
 }
 
 function materialAllowed(material: MaterialSignature, options?: MatchOptions): boolean {
   if (options?.includeSalvage === false && material.category?.toLowerCase() === 'salvage') return false;
   if (options?.includeFpsRoc === false && ['fps', 'vehicle'].includes(material.category?.toLowerCase() ?? '')) return false;
+  if (material.category?.toLowerCase() === 'mineable' && !materialValidAtLocation(material.materialName, options?.location)) return false;
   const systems = material.systems?.length ? material.systems : systemsForMaterial(material.materialName);
   if (options?.system && options.system !== 'All' && systems.length) {
     return systems.includes(options.system);

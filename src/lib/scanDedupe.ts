@@ -11,7 +11,8 @@ export type LastAcceptedResult = {
 };
 
 export function normalizeMaterial(material: string): string {
-  return material.trim().toLowerCase().replace(/\s+/g, ' ');
+  const normalized = material.trim().toLowerCase().replace(/\s+/g, ' ');
+  return normalized === 'savrillium' ? 'savrilium' : normalized;
 }
 
 export function buildScanResultKey(matches: MatchIdentity[], normalizedSignature: string): string {

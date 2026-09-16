@@ -16,11 +16,12 @@ export interface SigLockSettings {
   showScannedValueOnOverlay: boolean;
   overlayResultLifetimeSeconds: number;
   rollingHistoryLimit: number;
-  showSecondaryMaterials: boolean;
+  showComposition: boolean;
   returnSalvageResults: boolean;
   includeFpsRocResults: boolean;
   onlyShowSolvedResults: boolean;
   selectedSystemFilter: SystemFilter;
+  watchedMaterials: string[];
 }
 
 export const DEFAULT_SETTINGS: SigLockSettings = {
@@ -30,18 +31,19 @@ export const DEFAULT_SETTINGS: SigLockSettings = {
   overlayTextColor: '#e5e7eb',
   overlayBackgroundColor: '#0f1115',
   overlayAccentColor: '#3b82f6',
-  overlayOpacity: 0.96,
+  overlayOpacity: 0,
   overlayFontSize: 13,
   overlayHighContrast: true,
   overlayCompactMode: true,
   showScannedValueOnOverlay: false,
   overlayResultLifetimeSeconds: 20,
   rollingHistoryLimit: 30,
-  showSecondaryMaterials: false,
+  showComposition: false,
   returnSalvageResults: true,
   includeFpsRocResults: true,
   onlyShowSolvedResults: false,
   selectedSystemFilter: 'All',
+  watchedMaterials: [],
 };
 
 let store: Store | null = null;
@@ -57,7 +59,14 @@ function numberInRange(value: unknown, fallback: number, min: number, max: numbe
 }
 
 export function sanitizeSettings(value: unknown): SigLockSettings {
-  const raw = value && typeof value === 'object' ? value as Partial<SigLockSettings> : {};
+  const raw = value && typeof value === 'object'
+    ? value as Partial<SigLockSettings> & { showSecondaryMaterials?: boolean }
+    : {};
+  const showComposition = typeof raw.showComposition === 'boolean'
+    ? raw.showComposition
+    : typeof raw.showSecondaryMaterials === 'boolean'
+      ? raw.showSecondaryMaterials
+      : DEFAULT_SETTINGS.showComposition;
   return {
     scanNowKeybind: typeof raw.scanNowKeybind === 'string' && raw.scanNowKeybind.trim().length > 0
       ? raw.scanNowKeybind
@@ -69,20 +78,23 @@ export function sanitizeSettings(value: unknown): SigLockSettings {
     overlayTextColor: color(raw.overlayTextColor, DEFAULT_SETTINGS.overlayTextColor),
     overlayBackgroundColor: color(raw.overlayBackgroundColor, DEFAULT_SETTINGS.overlayBackgroundColor),
     overlayAccentColor: color(raw.overlayAccentColor, DEFAULT_SETTINGS.overlayAccentColor),
-    overlayOpacity: numberInRange(raw.overlayOpacity, DEFAULT_SETTINGS.overlayOpacity, 0.35, 1),
+    overlayOpacity: numberInRange(raw.overlayOpacity, DEFAULT_SETTINGS.overlayOpacity, 0, 1),
     overlayFontSize: numberInRange(raw.overlayFontSize, DEFAULT_SETTINGS.overlayFontSize, 11, 20),
     overlayHighContrast: typeof raw.overlayHighContrast === 'boolean' ? raw.overlayHighContrast : DEFAULT_SETTINGS.overlayHighContrast,
     overlayCompactMode: typeof raw.overlayCompactMode === 'boolean' ? raw.overlayCompactMode : DEFAULT_SETTINGS.overlayCompactMode,
     showScannedValueOnOverlay: typeof raw.showScannedValueOnOverlay === 'boolean' ? raw.showScannedValueOnOverlay : DEFAULT_SETTINGS.showScannedValueOnOverlay,
     overlayResultLifetimeSeconds: numberInRange(raw.overlayResultLifetimeSeconds, DEFAULT_SETTINGS.overlayResultLifetimeSeconds, 5, 120),
     rollingHistoryLimit: numberInRange(raw.rollingHistoryLimit, DEFAULT_SETTINGS.rollingHistoryLimit, 25, 50),
-    showSecondaryMaterials: typeof raw.showSecondaryMaterials === 'boolean' ? raw.showSecondaryMaterials : DEFAULT_SETTINGS.showSecondaryMaterials,
+    showComposition,
     returnSalvageResults: typeof raw.returnSalvageResults === 'boolean' ? raw.returnSalvageResults : DEFAULT_SETTINGS.returnSalvageResults,
     includeFpsRocResults: typeof raw.includeFpsRocResults === 'boolean' ? raw.includeFpsRocResults : DEFAULT_SETTINGS.includeFpsRocResults,
     onlyShowSolvedResults: typeof raw.onlyShowSolvedResults === 'boolean' ? raw.onlyShowSolvedResults : DEFAULT_SETTINGS.onlyShowSolvedResults,
     selectedSystemFilter: ['All', 'Stanton', 'Pyro', 'Nyx'].includes(raw.selectedSystemFilter ?? '')
       ? raw.selectedSystemFilter as SystemFilter
       : DEFAULT_SETTINGS.selectedSystemFilter,
+    watchedMaterials: Array.isArray(raw.watchedMaterials)
+      ? [...new Set(raw.watchedMaterials.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).map((item) => item.trim()))].slice(0, 64)
+      : DEFAULT_SETTINGS.watchedMaterials,
   };
 }
 

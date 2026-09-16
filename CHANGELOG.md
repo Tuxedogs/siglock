@@ -1,5 +1,35 @@
 # Changelog
 
+## v0.1.0-beta.5
+
+### Added
+
+- Added independent OCR region profiles for Golem, Prospector, MOLE, and custom ships, with a persistent active profile.
+- Added per-profile overlay-position persistence, plus safe restoration and reset controls.
+- Added a location-aware Minables index and a persistent watch list for materials relevant to the current system and location.
+- Added configurable overlay text, background, accent, opacity, size, compact mode, high contrast, result lifetime, composition, and signature-value controls.
+
+### Changed
+
+- Overhauled the desktop workspace with a clearer instrumentation hierarchy, readable metadata, and a responsive sidebar treatment.
+- Refreshed the dashboard OCR, scanner, watch-list, material, and overlay-preview panels around the active ship profile.
+- Made dashboard and Settings HUD previews match the live overlay’s configured colors, opacity, accent, and text size.
+
+### Fixed
+
+- Fixed monitor-relative capture coordinates and validation for mixed-DPI, secondary, and negative-coordinate monitor layouts.
+- Fixed region and overlay-position persistence races during native-settings hydration and verify saved region state after writes.
+- Improved Game.log discovery, monitoring recovery, scan de-duplication, OCR normalization, and diagnostic reporting for unreliable scans.
+- Fixed overlay opacity so the configured value is fully applied instead of being attenuated a second time.
+
+## v0.1.0-beta.4
+
+### Improvements
+
+- Refined Settings into distinct Shortcuts, Scan, Overlay, and Advanced Debug sections.
+- Added concise section descriptions and clearer expand/collapse indicators.
+- Kept version, update, and release-note controls visually separate from Settings content.
+
 ## v0.1.0-beta.3
 
 ### Added
@@ -19,6 +49,9 @@
 
 ### Fixed
 
+- Fixed a native-settings race that could overwrite the saved capture region with stale overlay-position data, and now verify region persistence immediately after save.
+- Improved OCR normalization and retry diagnostics so failed reads log the active region, crop size, raw OCR text, normalized signature text, candidate matches, and final resolution path.
+- Replaced "Secondary Materials" with true Rock Composition driven by the solved primary material, including the corrected Agricium composition profile in overlay displays.
 - Fixed repeated preview capture calls and continuous `last_capture.png` debug writes during scanning.
 - Fixed titlebar dragging and double-click behavior caused by overlapping native drag mechanisms.
 - Fixed stale region status caused by region hydration running after slower startup initialization.

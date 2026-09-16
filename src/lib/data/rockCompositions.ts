@@ -1,30 +1,37 @@
 import rawCompositions from './rock-compositions.json';
 import type { MatchResult } from './signatures';
-import type { SystemFilter } from '$lib/settings';
 
-export type CompositionStatus = 'resolved' | 'ambiguous-variant' | 'unavailable';
+export type CompositionStatus = 'resolved' | 'unavailable';
 
-export type RockCompositionRow = {
-  material: string;
+type RawTrace = {
   materialId: string;
-  densityRange: [number, number];
-  qualityRange: [number, number];
-  qualityScale: number;
+  material: string;
+  percentRange: number[];
 };
 
-export type RockCompositionVariant = {
-  id: string;
+type RawTraceProfile = {
   primaryMaterial: string;
+  primaryMaterialId: string;
   systems: string[];
-  mineableKinds: string[];
-  sourceCompositionGuids: string[];
-  compositionRows: RockCompositionRow[];
+  traces: RawTrace[];
+};
+
+export type CompositionEntry = {
+  materialId: string;
+  displayName: string;
+  percentMin: number;
+  percentMax: number;
+};
+
+export type MaterialCompositionProfile = {
+  primaryMaterialId: string;
+  primaryDisplayName: string;
+  entries: CompositionEntry[];
 };
 
 export type ResolvedComposition = {
   compositionStatus: CompositionStatus;
-  compositionRows: RockCompositionRow[];
-  secondaryMaterials: string[];
+  compositionProfile: MaterialCompositionProfile | null;
 };
 
 export type ScanResult = ResolvedComposition & {
@@ -34,9 +41,11 @@ export type ScanResult = ResolvedComposition & {
 
 const aliases: Record<string, string> = {
   aluminum: 'aluminium',
-  heph: 'hephaestanite',
+  hephaestanite: 'heph',
+  pressurizedice: 'ice',
   quantainium: 'quantanium',
-  savrilium: 'savrillium',
+  rawice: 'ice',
+  savrillium: 'savrilium',
 };
 
 export function canonicalMaterialKey(value: string): string {
@@ -44,61 +53,48 @@ export function canonicalMaterialKey(value: string): string {
   return aliases[key] ?? key;
 }
 
-const variants = (rawCompositions.variants as unknown as RockCompositionVariant[]);
+const profiles = new Map<string, MaterialCompositionProfile>();
+const systemsByMaterial = new Map<string, string[]>();
+for (const profile of rawCompositions.profiles as unknown as RawTraceProfile[]) {
+  const materialKey = canonicalMaterialKey(profile.primaryMaterial);
+  profiles.set(materialKey, {
+    primaryMaterialId: profile.primaryMaterialId,
+    primaryDisplayName: profile.primaryMaterial,
+    entries: profile.traces.map((trace) => ({
+      materialId: trace.materialId,
+      displayName: trace.material,
+      percentMin: trace.percentRange[0],
+      percentMax: trace.percentRange[1],
+    })),
+  });
+  systemsByMaterial.set(materialKey, profile.systems);
+}
 
 export function systemsForMaterial(material: string): string[] {
-  const primaryKey = canonicalMaterialKey(material);
-  return [...new Set(variants
-    .filter((variant) => canonicalMaterialKey(variant.primaryMaterial) === primaryKey)
-    .flatMap((variant) => variant.systems))]
-    .sort();
+  return systemsByMaterial.get(canonicalMaterialKey(material)) ?? [];
 }
 
-export function resolveRockComposition(
-  primaryMaterial: string,
-  system: SystemFilter = 'All'
-): ResolvedComposition {
-  const primaryKey = canonicalMaterialKey(primaryMaterial);
-  let candidates = variants.filter((variant) => canonicalMaterialKey(variant.primaryMaterial) === primaryKey);
-
-  if (system !== 'All') {
-    candidates = candidates.filter((variant) => variant.systems.includes(system));
-  }
-
-  if (candidates.length === 0) {
-    return { compositionStatus: 'unavailable', compositionRows: [], secondaryMaterials: [] };
-  }
-
-  if (candidates.length !== 1) {
-    return { compositionStatus: 'ambiguous-variant', compositionRows: [], secondaryMaterials: [] };
-  }
-
-  const compositionRows = candidates[0].compositionRows;
-  const secondaryMaterials = [...new Set(compositionRows
-    .filter((row) => canonicalMaterialKey(row.material) !== primaryKey)
-    .map((row) => row.material))];
-
-  return { compositionStatus: 'resolved', compositionRows, secondaryMaterials };
+export function resolveRockComposition(primaryMaterial: string): ResolvedComposition {
+  const profile = profiles.get(canonicalMaterialKey(primaryMaterial)) ?? null;
+  return profile
+    ? { compositionStatus: 'resolved', compositionProfile: profile }
+    : { compositionStatus: 'unavailable', compositionProfile: null };
 }
 
-export function resolveScanResult(
-  matches: MatchResult[],
-  system: SystemFilter = 'All'
-): ScanResult {
+export function resolveScanResult(matches: MatchResult[]): ScanResult {
   const primaryMatch = matches[0] ?? null;
   if (!primaryMatch) {
     return {
       primaryMatch: null,
       otherCandidates: [],
       compositionStatus: 'unavailable',
-      compositionRows: [],
-      secondaryMaterials: [],
+      compositionProfile: null,
     };
   }
 
   return {
     primaryMatch,
     otherCandidates: matches.slice(1),
-    ...resolveRockComposition(primaryMatch.material, system),
+    ...resolveRockComposition(primaryMatch.material),
   };
 }

@@ -53,10 +53,11 @@ jobs:
           tagName: v__VERSION__
           releaseName: ${{ steps.release_meta.outputs.title }}
           releaseBody: |
-            SigLock v0.1.0 Beta 3 open beta build.
+            SigLock v0.1.0 Beta 5 open beta build.
 
-            This release adds capture and overlay previews, result controls, composition data, and system-aware signature disambiguation.
-            It also fixes region startup state, picker completion, titlebar dragging, and repeated debug capture writes.
+            This release overhauls the mining workspace, adds per-ship OCR regions
+            and overlay-position persistence, expands the location-aware Minables
+            index and watch list, and improves multi-monitor capture reliability.
 
             Download the Windows setup executable below.
           releaseDraft: false

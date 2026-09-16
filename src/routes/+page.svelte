@@ -8,16 +8,46 @@
   import { openUrl } from '@tauri-apps/plugin-opener';
   import { relaunch } from '@tauri-apps/plugin-process';
   import { check, type Update } from '@tauri-apps/plugin-updater';
-  import { dev } from '$app/environment';
-  import { findNearestSignature, matchObservedValue, type MatchResult } from '$lib/data/signatures';
-  import { resolveScanResult, type CompositionStatus, type ScanResult } from '$lib/data/rockCompositions';
+  import { findNearestSignature, getSignatures, matchObservedValue, type MatchResult } from '$lib/data/signatures';
+  import { locationLabel, locationsForMaterial, materialValidAtLocation } from '$lib/data/materialLocations';
+  import {
+    resolveScanResult,
+    type CompositionEntry,
+    type CompositionStatus,
+    type MaterialCompositionProfile,
+    type ScanResult,
+  } from '$lib/data/rockCompositions';
   import { buildScanResultKey, isDuplicateResult, normalizeMaterial } from '$lib/scanDedupe';
   import { DEFAULT_SETTINGS, loadSettings, saveSettings, type SigLockSettings, type SystemFilter } from '$lib/settings';
 
   type Trigger = 'Manual' | 'Active';
   type ScanStatus = 'matched' | 'no match' | 'invalid' | 'failed' | 'skipped';
   type ShortcutAction = 'manual' | 'auto';
+  type AppPage = 'dashboard' | 'regions' | 'minables' | 'overlay' | 'settings';
+  type ShipId = 'golem' | 'prospector' | 'mole';
   type ScanRegion = { x: number; y: number; width: number; height: number };
+  type RegionProfile = {
+    id: string;
+    name: string;
+    builtIn: boolean;
+    scanRegion: ScanRegion | null;
+  };
+  type RegionProfilesSnapshot = {
+    activeRegionId: string;
+    profiles: RegionProfile[];
+  };
+  type GameLogStatus = {
+    path: string | null;
+    channel: string | null;
+    health: string;
+    currentLocation: string | null;
+    locationSource: string | null;
+    locationConfidence: string | null;
+    detectedShip: ShipId | null;
+    shipSource: string | null;
+    playerHandle: string | null;
+    lastLineAt: string | null;
+  };
   type HistoryEntry = {
     id: number;
     timestamp: string;
@@ -41,7 +71,7 @@
   type OverlayMatch = {
     key: string;
     material: string;
-    secondaryMaterials: string[];
+    compositionProfile: MaterialCompositionProfile | null;
     otherCandidates: string[];
     compositionStatus: CompositionStatus;
     rockCount: number;
@@ -49,6 +79,8 @@
     detailLabel?: string;
     repeatCount: number;
     updatedAt: string;
+    watched: boolean;
+    detected: boolean;
   };
   type LastAcceptedScan = {
     key: string;
@@ -83,6 +115,13 @@
   let matches = $state<MatchResult[]>([]);
   let history = $state<HistoryEntry[]>([]);
   let captureRegion = $state<ScanRegion | null>(null);
+  let activeRegionId = $state('prospector');
+  let regionProfiles = $state<RegionProfile[]>([
+    { id: 'golem', name: 'Golem', builtIn: true, scanRegion: null },
+    { id: 'prospector', name: 'Prospector', builtIn: true, scanRegion: null },
+    { id: 'mole', name: 'MOLE', builtIn: true, scanRegion: null },
+  ]);
+  let newRegionName = $state('');
   let regionLoadComplete = $state(false);
   let activeScanOn = $state(false);
   let overlayVisible = $state(true);
@@ -113,14 +152,22 @@
   let releaseNotesLoading = $state(false);
   let releaseNotesError = $state(false);
   let releaseNotes = $state<ReleaseNoteVersion[]>([]);
-  let settingsOpen = $state(false);
-  let openSettingsSection = $state<'shortcuts' | 'scan' | 'overlay' | 'advanced'>('shortcuts');
+  let openSettingsSection = $state<'shortcuts' | 'scan' | 'advanced'>('shortcuts');
   let unlisteners: UnlistenFn[] = [];
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   let capturePreviewLoading = $state(false);
   let lastCapturePreviewAt = 0;
   let scannerStatusBeforeRegionPicker = 'Ready';
   let mainWindowDragActive = false;
+  let gameLogStatus = $state<GameLogStatus>({
+    path: null, channel: null, health: 'starting', currentLocation: null,
+    locationSource: null, locationConfidence: null, detectedShip: null,
+    shipSource: null, playerHandle: null, lastLineAt: null,
+  });
+  let gameLogPathInput = $state('');
+  let currentPage = $state<AppPage>('dashboard');
+  let minableSearch = $state('');
+  let newRegionDraft = $state(false);
 
   function isValidRegion(region: unknown): region is ScanRegion {
     if (!region || typeof region !== 'object') return false;
@@ -151,13 +198,64 @@
       system: settings.selectedSystemFilter,
       includeSalvage: settings.returnSalvageResults,
       includeFpsRoc: settings.includeFpsRocResults,
+      location: gameLogStatus.currentLocation,
     };
   }
 
-  function materialLabel(material: string, secondaryMaterials: string[] = []): string {
-    return settings.showSecondaryMaterials && secondaryMaterials.length
-      ? `${material} | ${secondaryMaterials.join(' | ')}`
-      : material;
+  function materialLabel(material: string): string {
+    return material;
+  }
+
+  function activeRegionProfile() {
+    return regionProfiles.find((profile) => profile.id === activeRegionId) ?? regionProfiles[0] ?? {
+      id: 'prospector', name: 'Prospector', builtIn: true, scanRegion: null,
+    };
+  }
+
+  function applyRegionSnapshot(snapshot: RegionProfilesSnapshot) {
+    activeRegionId = snapshot.activeRegionId;
+    regionProfiles = snapshot.profiles;
+    const region = activeRegionProfile().scanRegion;
+    captureRegion = isValidRegion(region) ? region : null;
+  }
+
+  function isWatched(material: string) {
+    const key = normalizeMaterial(material);
+    return settings.watchedMaterials.some((item) => normalizeMaterial(item) === key);
+  }
+
+  function toggleWatch(material: string) {
+    settings.watchedMaterials = isWatched(material)
+      ? settings.watchedMaterials.filter((item) => normalizeMaterial(item) !== normalizeMaterial(material))
+      : [...settings.watchedMaterials, material];
+    overlayMatches = overlayMatches.map((match) => ({ ...match, watched: isWatched(match.material) }));
+    void publishOverlayMatches();
+    persistSettings();
+  }
+
+  function visibleMinables() {
+    const query = minableSearch.trim().toLowerCase();
+    return getSignatures().materials
+      .map((material) => ({ ...material, material: material.materialName, locations: locationsForMaterial(material.materialName) }))
+      .filter((row) => !query || row.material.toLowerCase().includes(query) || row.locations.some((location) => location.includes(query)))
+      .sort((a, b) => {
+        const location = gameLogStatus.currentLocation;
+        const validDelta = Number(materialValidAtLocation(b.material, location)) - Number(materialValidAtLocation(a.material, location));
+        return validDelta || a.material.localeCompare(b.material);
+      });
+  }
+
+  function locationValidity(row: ReturnType<typeof visibleMinables>[number]) {
+    if (!gameLogStatus.currentLocation || !row.locations.length) return '—';
+    return materialValidAtLocation(row.material, gameLogStatus.currentLocation) ? 'VALID' : 'OUT';
+  }
+
+  function formatCompositionNumber(value: number) {
+    return Number.isInteger(value) ? String(value) : value.toFixed(1);
+  }
+
+  function compositionPercent(entry: CompositionEntry) {
+    return `${formatCompositionNumber(entry.percentMin)}-${formatCompositionNumber(entry.percentMax)}%`;
   }
 
   async function publishOverlayMatches() {
@@ -181,7 +279,7 @@
     const next: OverlayMatch = {
       key,
       material: primary.material,
-      secondaryMaterials: scanResult.secondaryMaterials,
+      compositionProfile: scanResult.compositionProfile,
       otherCandidates: scanResult.otherCandidates.map((match) => match.material),
       compositionStatus: scanResult.compositionStatus,
       rockCount: primary.rockCount,
@@ -189,6 +287,8 @@
       detailLabel: String(primary.expected),
       repeatCount: (existing?.repeatCount ?? 0) + 1,
       updatedAt,
+      watched: isWatched(primary.material),
+      detected: true,
     };
     overlayMatches = [next, ...overlayMatches.filter((item) => item !== existing && item.rockCount > 0)].slice(0, 3);
     void publishOverlayMatches();
@@ -200,7 +300,7 @@
     overlayMatches = [{
       key: `${normalizeMaterial(material)}|0|${valueLabel}|${updatedAt}`,
       material,
-      secondaryMaterials: [],
+      compositionProfile: null,
       otherCandidates: [],
       compositionStatus: 'unavailable' as const,
       rockCount: 0,
@@ -208,6 +308,8 @@
       detailLabel,
       repeatCount: 1,
       updatedAt,
+      watched: false,
+      detected: false,
     }, ...overlayMatches.filter((item) => item.rockCount > 0)].slice(0, 3);
     void publishOverlayMatches();
   }
@@ -237,13 +339,12 @@
   function runManualMatch() {
     const value = Number.parseInt(observed.replace(/\D/g, ''), 10);
     matches = value >= 100 ? matchObservedValue(value, tolerance, matchOptions()) : [];
-    if (matches.length) addOverlayMatches(resolveScanResult(matches, settings.selectedSystemFilter), String(value));
+    if (matches.length) addOverlayMatches(resolveScanResult(matches), String(value));
   }
 
   async function loadSavedRegion(startup = false) {
     try {
-      const region = await invoke<ScanRegion | null>('get_crop_region');
-      captureRegion = isValidRegion(region) ? region : null;
+      applyRegionSnapshot(await invoke<RegionProfilesSnapshot>('get_region_profiles'));
     } catch {
       captureRegion = null;
     } finally {
@@ -253,6 +354,56 @@
           ? '[SigLock] startup region load: found valid saved region'
           : '[SigLock] startup region load: no valid saved region');
       }
+    }
+  }
+
+  async function saveGameLogPath() {
+    try {
+      gameLogStatus = await invoke<GameLogStatus>('configure_game_log_path', { path: gameLogPathInput });
+      gameLogPathInput = gameLogStatus.path ?? gameLogPathInput;
+      scannerStatus = `Monitoring ${gameLogStatus.channel ?? 'Game.log'}`;
+    } catch (error) {
+      scannerStatus = `Game.log path failed: ${String(error)}`;
+    }
+  }
+
+  async function switchRegion(regionId: string) {
+    if (regionId === activeRegionId) return;
+    try {
+      applyRegionSnapshot(await invoke<RegionProfilesSnapshot>('set_active_region', { regionId }));
+      newRegionDraft = false;
+      capturePreviewUrl = null;
+      capturePreviewError = null;
+      matches = [];
+      scannerStatus = captureRegion
+        ? `${activeRegionProfile().name} capture loaded`
+        : `${activeRegionProfile().name} needs capture bounds`;
+    } catch (error) {
+      scannerStatus = `Region switch failed: ${String(error)}`;
+    }
+  }
+
+  async function createCustomRegion() {
+    try {
+      applyRegionSnapshot(await invoke<RegionProfilesSnapshot>('create_region', { name: newRegionName }));
+      newRegionName = '';
+      newRegionDraft = false;
+      capturePreviewUrl = null;
+      scannerStatus = `${activeRegionProfile().name} created; set its OCR bounds.`;
+    } catch (error) {
+      scannerStatus = `Region creation failed: ${String(error)}`;
+    }
+  }
+
+  async function deleteActiveRegion() {
+    const profile = activeRegionProfile();
+    if (!profile || profile.builtIn) return;
+    try {
+      applyRegionSnapshot(await invoke<RegionProfilesSnapshot>('delete_region', { regionId: profile.id }));
+      capturePreviewUrl = null;
+      scannerStatus = `${profile.name} deleted.`;
+    } catch (error) {
+      scannerStatus = `Region deletion failed: ${String(error)}`;
     }
   }
 
@@ -299,7 +450,10 @@
       const rawValue = result?.raw_text || (result?.normalized_value?.toString() ?? '-');
       const durationMs = Math.round(performance.now() - started);
       const normalized = typeof result?.normalized_value === 'number' ? result.normalized_value : null;
-      const normalizedSignature = normalized?.toString() ?? rawValue.replace(/\D/g, '');
+      const normalizedSignature = result?.normalized_text || normalized?.toString() || rawValue.replace(/\D/g, '');
+      const candidateMatchesBeforeFilters = normalized
+        ? matchObservedValue(normalized, tolerance, { system: 'All', includeSalvage: true, includeFpsRoc: true })
+        : [];
       const nextMatches = normalized ? matchObservedValue(normalized, tolerance, matchOptions()) : [];
       const unfilteredMatches = normalized && !settings.returnSalvageResults
         ? matchObservedValue(normalized, tolerance, { ...matchOptions(), includeSalvage: true })
@@ -316,18 +470,32 @@
         return;
       }
       const nearest = normalized ? findNearestSignature(normalized, matchOptions()) : null;
-      const resolvedScan = resolveScanResult(nextMatches, settings.selectedSystemFilter);
+      const resolvedScan = resolveScanResult(nextMatches);
       matches = nextMatches;
       ocrError = result?.error || null;
       lastScanTime = new Date().toLocaleTimeString();
 
       const status: ScanStatus = result?.error ? 'invalid' : nextMatches.length ? 'matched' : normalized ? 'no match' : 'invalid';
       const material = resolvedScan.primaryMatch
-        ? materialLabel(resolvedScan.primaryMatch.material, resolvedScan.secondaryMaterials)
+        ? materialLabel(resolvedScan.primaryMatch.material)
         : (result?.error || 'No match');
       const confidence = nextMatches[0]?.confidence ?? result?.confidence ?? null;
       lastScanSummary = status === 'matched' ? `${material} (${rawValue})` : `${status}: ${rawValue}`;
       scannerStatus = `${trigger} scan ${status}`;
+      console.info('[SigLock] scan diagnostics', {
+        trigger,
+        activeRegionUsed: captureRegion,
+        cropDimensions: result?.capture_width && result?.capture_height ? `${result.capture_width}x${result.capture_height}` : null,
+        ocrRawText: result?.raw_text ?? '',
+        normalizedSignatureText: normalizedSignature || null,
+        parsedNumericSignature: normalized,
+        candidateMaterialsBeforeFilters: candidateMatchesBeforeFilters.map((match) => `${match.material}:${match.expected}`),
+        candidateMaterialsAfterFilters: nextMatches.map((match) => `${match.material}:${match.expected}`),
+        finalSelectedMaterial: resolvedScan.primaryMatch?.material ?? null,
+        unknownReason: status === 'matched'
+          ? null
+          : result?.error || (normalized ? 'No valid material remained after filters.' : 'OCR did not yield a parseable signature.'),
+      });
       const timestamp = result?.scanned_at || new Date().toISOString();
       const baseHistory: Omit<HistoryEntry, 'id' | 'repeatCount'> = {
         timestamp,
@@ -672,6 +840,23 @@
     return history;
   }
 
+  function operationalHistory() {
+    return history.filter((entry) => entry.status === 'matched' || entry.status === 'failed').slice(0, 4);
+  }
+
+  function routineReadCount() {
+    return history
+      .filter((entry) => entry.status === 'invalid' || entry.status === 'no match' || entry.status === 'skipped')
+      .reduce((total, entry) => total + entry.repeatCount, 0);
+  }
+
+  function signatureSummary(material: ReturnType<typeof getSignatures>['materials'][number]) {
+    return material.signatures
+      .filter((entry) => entry.value != null)
+      .map((entry) => `${entry.rockCount}× ${entry.value}`)
+      .join(' · ');
+  }
+
   function historyTitle(entry: HistoryEntry) {
     if (isSystemError(entry)) return 'Scan error';
     if (entry.status === 'failed') return 'Scan failed';
@@ -729,6 +914,10 @@
 
   function regionSize() {
     return captureRegion ? `${captureRegion.width}x${captureRegion.height}` : null;
+  }
+
+  function displayedCaptureRegion() {
+    return newRegionDraft ? null : captureRegion;
   }
 
   function regionSummary() {
@@ -807,6 +996,7 @@
   async function clearRegion() {
     await invoke('clear_crop_region');
     captureRegion = null;
+    regionProfiles = regionProfiles.map((profile) => profile.id === activeRegionId ? { ...profile, scanRegion: null } : profile);
     capturePreviewUrl = null;
     capturePreviewError = null;
     regionLoadComplete = true;
@@ -833,24 +1023,49 @@
   }
 
   function openSettingsPane() {
-    settingsOpen = true;
+    currentPage = 'settings';
     void refreshCapturePreview();
   }
 
-  function closeSettingsPane() {
-    settingsOpen = false;
+  async function confirmRegionReset() {
+    if (!captureRegion) return;
+    if (!window.confirm(`Clear the OCR capture region for ${activeRegionProfile().name}? This removes its saved bounds and live preview. You can define it again at any time.`)) return;
+    try {
+      await clearRegion();
+      scannerStatus = `${activeRegionProfile().name} OCR capture region cleared.`;
+    } catch (error) {
+      scannerStatus = `Region reset failed: ${String(error)}`;
+    }
+  }
+
+  function navigatePage(page: AppPage) {
+    currentPage = page;
+    if (page === 'regions' || page === 'settings') void refreshCapturePreview();
+  }
+
+  function beginNewRegion() {
+    currentPage = 'regions';
+    newRegionDraft = true;
+    newRegionName = '';
+    capturePreviewUrl = null;
+    capturePreviewError = null;
+  }
+
+  async function showCapturePreview() {
+    currentPage = 'regions';
+    await refreshCapturePreview(true);
   }
 
   function openSettings(section: typeof openSettingsSection) {
     openSettingsSection = section;
   }
 
-  function mockOverlayMaterials(): { primary: string; secondary: string[] } {
+  function mockOverlayMaterials(): { primary: string; compositionProfile: MaterialCompositionProfile | null } {
     const mockMatches = matchObservedValue(3840, 25, { system: 'All', includeSalvage: true });
-    const mockResult = resolveScanResult(mockMatches, 'All');
+    const mockResult = resolveScanResult(mockMatches);
     return {
       primary: mockResult.primaryMatch?.material ?? 'Aslarite',
-      secondary: mockResult.secondaryMaterials,
+      compositionProfile: mockResult.compositionProfile,
     };
   }
 
@@ -981,10 +1196,17 @@
     unlisteners.push(await listen<ScanRegion>('crop-region-updated', (event) => {
       if (isValidRegion(event.payload)) {
         captureRegion = event.payload;
+        regionProfiles = regionProfiles.map((profile) => profile.id === activeRegionId
+          ? { ...profile, scanRegion: event.payload }
+          : profile);
         regionLoadComplete = true;
         scannerStatus = 'Capture region saved';
-        if (settingsOpen) void refreshCapturePreview();
+        if (currentPage === 'regions' || currentPage === 'settings') void refreshCapturePreview();
       }
+    }));
+    unlisteners.push(await listen<GameLogStatus>('game-log-status-updated', (event) => {
+      gameLogStatus = event.payload;
+      if (!gameLogPathInput && event.payload.path) gameLogPathInput = event.payload.path;
     }));
     unlisteners.push(await listen('region-picker-cancelled', () => {
       scannerStatus = scannerStatusBeforeRegionPicker;
@@ -1029,6 +1251,8 @@
       activeScanOn = !!appState?.active_scan_enabled;
       overlayVisible = !!appState?.overlay_visible;
       overlaySetupMode = !!appState?.overlay_setup_mode;
+      gameLogStatus = await invoke<GameLogStatus>('get_game_log_status');
+      gameLogPathInput = gameLogStatus.path ?? '';
     } catch (error) {
       scannerStatus = `Backend check failed: ${String(error)}`;
     }
@@ -1055,114 +1279,162 @@
 
 <svelte:head><title>SigLock</title></svelte:head>
 
-<main>
-  <header class="topbar">
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="drag-title" onmousedown={startMainWindowDrag} ondblclick={preventTitlebarDoubleClick}>
-      <img class="brand-mark" src="/siglock-icon.png" alt="" />
-      <strong>SigLock</strong>
-      <span>Mining Signature Overlay</span>
-      <i></i>
+<main class="app-shell">
+  <aside class="side-rail">
+    <div class="brand-lockup">
+      <img src="/siglock-icon.png" alt="" />
+      <div><strong>SigLock</strong><span>scan smarter<br />mine better</span></div>
     </div>
-    <div class="top-actions">
-      <button class:good={overlaySetupMode} onclick={toggleOverlaySetupMode}>{overlaySetupMode ? 'Lock Overlay' : 'Unlock Overlay'}</button>
-      <button class:primary={!activeScanOn} class:active={activeScanOn} onclick={toggleActiveScan}>Auto: {activeScanOn ? 'Stop' : 'Start'}</button>
-      <button class="icon-action" aria-label="Settings" title="Settings" onclick={openSettingsPane}>
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z" />
-          <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1A2 2 0 0 1 4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9L4.2 7A2 2 0 0 1 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1A2 2 0 0 1 19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.5 1h.1a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" />
-        </svg>
-      </button>
-      <button class="window-control" aria-label="Minimize" title="Minimize" onclick={minimizeWindow}>_</button>
-      <button class="window-control close" aria-label="Close" title="Close" onclick={closeApp}>X</button>
-    </div>
-  </header>
+    <nav aria-label="Primary navigation">
+      {#each [
+        ['dashboard', '⌂', 'Dashboard'], ['overlay', '▣', 'Overlay'], ['regions', '⌖', 'Regions'],
+        ['minables', '◈', 'Minables'], ['settings', '⚙', 'Settings'],
+      ] as item}
+        <button class:active={currentPage === item[0]} onclick={() => navigatePage(item[0] as AppPage)}>
+          <span aria-hidden="true">{item[1]}</span>{item[2]}
+        </button>
+      {/each}
+    </nav>
+    <div class="rail-footer"><span>Star Citizen utility</span><b>v{displayVersion(appVersion)}</b></div>
+  </aside>
 
-  <nav class="system-filter" aria-label="Signature system filter">
-    <span>System</span>
-    {#each ['All', 'Stanton', 'Pyro', 'Nyx'] as system}
-      <button class:active={settings.selectedSystemFilter === system} onclick={() => setSystemFilter(system as SystemFilter)}>{system}</button>
-    {/each}
-  </nav>
+  <div class="app-workspace">
+    <header class="topbar">
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div class="drag-title" onmousedown={startMainWindowDrag} ondblclick={preventTitlebarDoubleClick}>
+        <span>Star Citizen mining scanner utility</span><i></i>
+      </div>
+      <div class="connection-state"><i class:live={gameLogStatus.health === 'monitoring'}></i>{gameLogStatus.health === 'monitoring' ? 'Connected' : 'Telemetry offline'}</div>
+      <button class="window-control" aria-label="Minimize" title="Minimize" onclick={minimizeWindow}>—</button>
+      <button class="window-control close" aria-label="Close" title="Close" onclick={closeApp}>×</button>
+    </header>
 
-  <section class="status-strip" aria-label="Session status">
-    <div class="status-card {regionSummary().tone} region-card">
-      <div><small>Region</small><strong>{regionSummary().value}</strong><span>{regionSummary().detail}</span></div>
-      <button onclick={setRegion}>{regionSummary().action}</button>
-    </div>
-    <div class="status-card {scannerSummary().tone}"><small>Scanner</small><strong>{scannerSummary().value}</strong><span>{scannerSummary().detail}</span></div>
-    <div class="status-card {lastScanSummaryCard().tone}"><small>Last</small><strong>{lastScanSummaryCard().value}</strong><span>{lastScanSummaryCard().detail}</span></div>
+    <section class="profile-bar" aria-label="Active OCR region">
+      <div class="profile-label"><span aria-hidden="true">✥</span><div><small>Active OCR</small><strong>Region</strong></div></div>
+      <div class="ship-selector">
+        {#each regionProfiles as profile}
+          <button class:active={activeRegionId === profile.id} class:configured={!!profile.scanRegion} onclick={() => switchRegion(profile.id)}>{profile.name}</button>
+        {/each}
+      </div>
+      <p>Built-in presets and custom OCR regions persist independently.</p>
+      <nav class="system-selector" aria-label="Signature system filter">
+        {#each ['All', 'Stanton', 'Pyro', 'Nyx'] as system}
+          <button class:active={settings.selectedSystemFilter === system} onclick={() => setSystemFilter(system as SystemFilter)}>{system}</button>
+        {/each}
+      </nav>
+    </section>
+
+  {#if currentPage === 'dashboard'}
+  <section class="dashboard-grid">
+    <article class="module region-module">
+      <header><div><small>OCR capture</small><h2>Region management</h2></div><button onclick={beginNewRegion}>New Region</button></header>
+      <p class="module-copy">Screen area scanned for {activeRegionProfile().name} signatures.</p>
+      <div class:active={!!captureRegion} class="region-entry">
+        <i></i><div><strong>{activeRegionProfile().name} signature readout</strong><span>{captureRegion ? `x ${captureRegion.x} · y ${captureRegion.y} · ${captureRegion.width} × ${captureRegion.height}` : 'No capture area configured'}</span></div><b>{captureRegion ? 'Active' : 'Missing'}</b>
+      </div>
+      <div class="profile-region-list">
+        {#each regionProfiles as profile}
+          {#if profile.id !== activeRegionId}<div><i class:configured={!!profile.scanRegion}></i><span>{profile.name}</span><b>{profile.scanRegion ? 'Configured' : 'Not set'}</b></div>{/if}
+        {/each}
+      </div>
+      <footer><button onclick={setRegion} disabled={!captureRegion}>Edit</button><button onclick={showCapturePreview} disabled={!captureRegion}>Capture preview</button><button class="danger-action" onclick={confirmRegionReset} disabled={!captureRegion}>Reset OCR region</button></footer>
+    </article>
+
+    <article class="module scanner-module">
+      <header><div><h2>Scanner state</h2></div><span class="state-dot {scannerSummary().tone}">{scannerSummary().value}</span></header>
+      <div class="auto-control"><div class="scan-orbit" class:running={activeScanOn}><span></span></div><div><small>Auto-Scan</small><strong>{activeScanOn ? 'ON' : 'OFF'}</strong></div><button role="switch" aria-label="Toggle Auto-Scan" aria-checked={activeScanOn} class:active={activeScanOn} onclick={toggleActiveScan}><i></i></button></div>
+      <div class="scan-metrics"><div><strong>{settings.activeScanIntervalMs / 1000}s</strong><span>Interval</span></div><div><strong>{currentFinds().length}</strong><span>Current finds</span></div><div><strong>{lastScanSummaryCard().value}</strong><span>Last result</span></div></div>
+      <footer><button class="primary" onclick={() => performScan('Manual')} disabled={isScanning || !captureRegion}>{isScanning ? 'Scanning…' : 'Scan now'}</button><span class:visible={overlayVisible}><i></i>HUD {overlayVisible ? 'visible' : 'hidden'}</span></footer>
+    </article>
+
+    <article class="module watch-module">
+      <header><div><h2>Minables</h2></div><button class="text-action" onclick={() => navigatePage('minables')}>View all →</button></header>
+      <div class="watch-list">
+        {#each visibleMinables().filter((row) => isWatched(row.material)).slice(0, 5) as row}<button onclick={() => toggleWatch(row.material)}><i class:detected={currentFinds().some((find) => normalizeMaterial(find.material) === normalizeMaterial(row.material))}></i><span>{row.material}</span><b>{currentFinds().some((find) => normalizeMaterial(find.material) === normalizeMaterial(row.material)) ? 'Detected' : 'Watching'}</b></button>{/each}
+        {#if !settings.watchedMaterials.length}<div class="compact-empty">No watched materials. Add them from Minables.</div>{/if}
+      </div>
+    </article>
+
+    <article class="module finds-module">
+      <header><div><h2>Current materials</h2></div><span>{currentFinds().length} detected</span></header>
+      <div class="material-results">
+        {#if currentFinds().length}
+          {#each currentFinds().slice(0, 5) as match}<div><i></i><strong>{materialLabel(match.material)}</strong><span>{match.rockCount} rock{match.rockCount === 1 ? '' : 's'}</span><b>{match.valueLabel ?? match.detailLabel ?? 'Matched'}</b></div>{/each}
+        {:else}<div class="results-empty"><span aria-hidden="true">◇</span><strong>Waiting for a recognized signature</strong><p>Matched materials appear here; routine invalid OCR reads stay out of the way.</p></div>{/if}
+      </div>
+      <footer class="activity-summary"><span>{operationalHistory().length} significant events</span>{#if routineReadCount()}<span>{routineReadCount()} routine misses consolidated</span>{/if}<button onclick={() => { openSettings('advanced'); navigatePage('settings'); }}>Diagnostics →</button></footer>
+    </article>
+
+    <article class="module overlay-dashboard">
+      <header><div><h2>Overlay preview</h2></div><button onclick={() => navigatePage('overlay')}>Configure overlay</button></header>
+      <div class="overlay-stage" style={`--preview-text:${settings.overlayTextColor};--preview-bg:${settings.overlayBackgroundColor};--preview-accent:${settings.overlayAccentColor};--preview-opacity:${settings.overlayOpacity};--preview-size:${settings.overlayFontSize}px`}>
+        <div class="hud-preview live-preview"><header><strong>SIGLOCK</strong><span><i class:online={activeScanOn}></i>AUTO</span></header>{#if currentFinds().length}{#each currentFinds().slice(0, 3) as match}<p><span>{match.material}</span>{#if isWatched(match.material)}<i class="watch-demo"></i>{/if}</p>{/each}{:else}<p class="hud-empty">Results appear here</p>{/if}</div>
+      </div>
+      <footer><span class:visible={overlayVisible}><i></i>{overlayVisible ? 'Visible in game' : 'Hidden'}</span><button onclick={toggleOverlay}>{overlayVisible ? 'Hide HUD' : 'Show HUD'}</button></footer>
+    </article>
   </section>
-
-  <section class="panel finds-panel">
-    <div class="section-title">
-      <h2>Current Finds</h2>
-      <span class="count-pill">{currentFinds().length}</span>
-    </div>
-    {#if currentFinds().length}
-      <div class="find-grid">
-        {#each currentFinds().slice(0, 3) as match}
-          <div class="find-card">
-            <strong>{materialLabel(match.material, match.secondaryMaterials)}</strong>
-            <span>{match.rockCount} rocks{match.valueLabel ? ` | ${match.valueLabel}` : ''}</span>
-            <small>Latest</small>
-            {#if match.repeatCount > 1}<b>x{match.repeatCount}</b>{/if}
+  {:else if currentPage === 'regions'}
+    <section class="workspace-page regions-workspace">
+      <header class="workspace-heading"><div><small>Capture geometry</small><h1>{newRegionDraft ? 'New region' : activeRegionProfile().name}</h1></div><span class="eyebrow">{newRegionDraft ? 'Not saved' : regionSummary().value}</span></header>
+      <div class="region-create-row"><input aria-label="Region name" maxlength="40" placeholder="Name this new region" bind:value={newRegionName} /><button onclick={createCustomRegion} disabled={!newRegionName.trim()}>{newRegionDraft ? 'Save new region' : 'Add region'}</button><button class="danger-action" onclick={deleteActiveRegion} disabled={newRegionDraft || activeRegionProfile().builtIn}>Delete selected</button></div>
+      <div class="region-layout">
+        <section class="instrument-panel region-instrument">
+          <div class="instrument-title"><span>Saved region</span><b>{displayedCaptureRegion() ? `${displayedCaptureRegion()!.width} × ${displayedCaptureRegion()!.height}` : 'Not configured'}</b></div>
+          <div class="region-readout">
+            {#if displayedCaptureRegion()}
+              <dl><div><dt>X</dt><dd>{displayedCaptureRegion()!.x}</dd></div><div><dt>Y</dt><dd>{displayedCaptureRegion()!.y}</dd></div><div><dt>Width</dt><dd>{displayedCaptureRegion()!.width}</dd></div><div><dt>Height</dt><dd>{displayedCaptureRegion()!.height}</dd></div></dl>
+            {:else}<p>{newRegionDraft ? 'Save a name to begin a clean OCR capture region.' : 'Select the scan-number area for this OCR region.'}</p>{/if}
+          </div>
+          <div class="button-row"><button class="primary" onclick={setRegion} disabled={newRegionDraft}>{captureRegion ? 'Edit region' : 'Set region'}</button><button class="danger-action" onclick={confirmRegionReset} disabled={!captureRegion || newRegionDraft}>Reset OCR region</button><button onclick={() => refreshCapturePreview(true)} disabled={!captureRegion || newRegionDraft}>Refresh preview</button></div>
+        </section>
+        <section class="instrument-panel preview-instrument">
+          <div class="instrument-title"><span>Live crop</span><b>{capturePreviewError ?? 'OCR input'}</b></div>
+          {#if capturePreviewUrl}<img class="capture-preview large" src={capturePreviewUrl} alt="Live preview of the active ship capture region" />{:else}<div class="preview-empty">{displayedCaptureRegion() ? 'Refresh to inspect the current crop.' : newRegionDraft ? 'No capture region has been created yet.' : 'No region stored for this profile.'}</div>{/if}
+        </section>
+      </div>
+    </section>
+  {:else if currentPage === 'minables'}
+    <section class="workspace-page">
+      <header class="workspace-heading"><div><small>Canonical signature reference</small><h1>Minables</h1></div><span class="eyebrow">{gameLogStatus.currentLocation ? locationLabel(gameLogStatus.currentLocation) : 'Location unknown'}</span></header>
+      <div class="table-toolbar"><input aria-label="Search minables" placeholder="Filter material or location" bind:value={minableSearch} /><span>{visibleMinables().length} materials · {settings.watchedMaterials.length} watched</span></div>
+      {#if settings.watchedMaterials.length}<div class="minables-watchlist" aria-label="Watched materials"><strong>Watchlist</strong>{#each visibleMinables().filter((row) => isWatched(row.material)) as row}<button class="watch-action watched" onclick={() => toggleWatch(row.material)}>{row.material} <span>Remove</span></button>{/each}</div>{/if}
+      <div class="data-table minables-table" role="table" aria-label="Minable location reference">
+        <div class="table-head" role="row"><span>Material</span><span>Class</span><span>Signature</span><span>Known locations</span><span>Here</span><span>Watch</span></div>
+        {#each visibleMinables() as row}
+          <div class:valid-here={!!gameLogStatus.currentLocation && materialValidAtLocation(row.material, gameLogStatus.currentLocation)} class="table-row" role="row">
+            <strong>{row.material}</strong><span>{row.category ?? 'Mineable'}</span><span class="mono">{signatureSummary(row)}</span><span>{row.locations.length ? row.locations.map(locationLabel).join(' · ') : 'No location restriction published'}</span>
+            <span class="validity">{locationValidity(row)}</span>
+            <button class:watched={isWatched(row.material)} class="watch-action" aria-label={`${isWatched(row.material) ? 'Unwatch' : 'Watch'} ${row.material}`} onclick={() => toggleWatch(row.material)}><i></i>{isWatched(row.material) ? 'Watched' : 'Watch'}</button>
           </div>
         {/each}
       </div>
-    {:else}
-      <div class="find-empty">
-        <strong>No current finds</strong>
-        <span>Run a scan to pin matched materials here.</span>
+    </section>
+  {:else if currentPage === 'overlay'}
+    <section class="workspace-page overlay-workspace">
+      <header class="workspace-heading"><div><small>HUD augmentation</small><h1>Overlay</h1></div><span class="eyebrow">{overlayVisible ? 'Visible' : 'Hidden'}</span></header>
+      <div class="overlay-config-grid">
+        <section class="instrument-panel"><div class="instrument-title"><span>Positioning</span><b>{activeRegionProfile().name} profile</b></div><div class="button-row"><button class:active={overlaySetupMode} onclick={toggleOverlaySetupMode}>{overlaySetupMode ? 'Lock position' : 'Unlock position'}</button><button onclick={resetOverlayPosition}>Reset</button><button onclick={toggleOverlay}>{overlayVisible ? 'Hide' : 'Show'}</button></div></section>
+        <section class="instrument-panel hud-preview-panel"><div class="instrument-title"><span>HUD preview</span><b>Minimal mode</b></div><div class="hud-preview" style={`--preview-text:${settings.overlayTextColor};--preview-bg:${settings.overlayBackgroundColor};--preview-accent:${settings.overlayAccentColor};--preview-opacity:${settings.overlayOpacity};--preview-size:${settings.overlayFontSize}px`}><header><strong>SIGLOCK</strong><span><i class:online={activeScanOn}></i>AUTO</span></header><p>Hadinite</p><p>Aphorite <i class="watch-demo"></i></p><p>Dolivine</p></div></section>
       </div>
-    {/if}
-  </section>
+      <section class="instrument-panel overlay-settings-panel"><div class="instrument-title"><span>Overlay configuration</span><b>Saved automatically</b></div><div class="appearance-grid">
+        <label>Text color <input type="color" bind:value={settings.overlayTextColor} onchange={persistSettings} /></label><label>Background <input type="color" bind:value={settings.overlayBackgroundColor} onchange={persistSettings} /></label><label>Accent <input type="color" bind:value={settings.overlayAccentColor} onchange={persistSettings} /></label><label>Opacity <strong>{Math.round(settings.overlayOpacity * 100)}%</strong><input type="range" min="0" max="1" step="0.05" bind:value={settings.overlayOpacity} onchange={persistSettings} /></label><label>Text size <strong>{settings.overlayFontSize}px</strong><input type="range" min="11" max="20" step="1" bind:value={settings.overlayFontSize} onchange={persistSettings} /></label><label>Result lifetime <strong>{settings.overlayResultLifetimeSeconds}s</strong><input type="range" min="5" max="120" step="5" bind:value={settings.overlayResultLifetimeSeconds} onchange={persistSettings} /></label><label class="toggle"><input type="checkbox" bind:checked={settings.overlayHighContrast} onchange={persistSettings} /><span></span> High contrast</label><label class="toggle"><input type="checkbox" bind:checked={settings.overlayCompactMode} onchange={persistSettings} /><span></span> Compact mode</label><label class="toggle"><input type="checkbox" bind:checked={settings.returnSalvageResults} onchange={applyResultSettings} /><span></span> Salvage</label><label class="toggle"><input type="checkbox" bind:checked={settings.includeFpsRocResults} onchange={applyResultSettings} /><span></span> FPS/ROC</label><label class="toggle"><input type="checkbox" bind:checked={settings.showComposition} onchange={applyResultSettings} /><span></span> Show Composition</label><label class="toggle"><input type="checkbox" bind:checked={settings.showScannedValueOnOverlay} onchange={persistSettings} /><span></span> Signature Value</label><label class="toggle"><input type="checkbox" bind:checked={settings.onlyShowSolvedResults} onchange={applyResultSettings} /><span></span> Only solved captures in overlay</label>
+      </div></section>
+    </section>
+  {/if}
 
-  <section class="panel history-card">
-    <div class="section-title history-title">
-      <h2>Scan Feed</h2>
-      <div class="history-actions">
-        <div class="filter-group" aria-label="Filter scan results">
-          <button class:active={historyFilter === 'all'} onclick={() => historyFilter = 'all'}>All</button>
-          <button class:active={historyFilter === 'matches'} onclick={() => historyFilter = 'matches'}>Matches</button>
-          <button class:active={historyFilter === 'issues'} onclick={() => historyFilter = 'issues'}>Issues</button>
-        </div>
-        <button onclick={() => history = []} disabled={!history.length}>Clear</button>
-      </div>
-    </div>
-    <div class="history-list">
-      {#if visibleHistory().length}
-        {#each visibleHistory() as entry (entry.id)}
-          <div class:matched-row={entry.status === 'matched'} class="history-row">
-            <span class:system-error={isSystemError(entry)} class="status {entry.status}">{historyStatus(entry)}</span>
-            <div class="history-primary">
-              <strong>{historyTitle(entry)}</strong>
-              <span>{historyDetail(entry)}</span>
-            </div>
-            {#if entry.repeatCount > 1}<b class="repeat">x{entry.repeatCount}</b>{/if}
-          </div>
-        {/each}
-      {:else}
-        <div class="feed-empty">
-          <strong>{history.length ? 'No results in this view' : 'Scan feed ready'}</strong>
-          <span>{history.length ? 'Try a different filter.' : 'Manual, auto, invalid, skipped, and match rows will appear here.'}</span>
-        </div>
-      {/if}
-    </div>
-  </section>
-
-  {#if settingsOpen}
-    <div class="settings-backdrop" role="presentation" onclick={closeSettingsPane}></div>
-    <aside class="settings-panel" aria-label="Settings">
+  {#if currentPage === 'settings'}
+    <section class="workspace-page settings-page" aria-label="Settings">
       <div class="settings-header">
-        <h2>Settings</h2>
-        <button class="window-control" aria-label="Close settings" onclick={closeSettingsPane}>X</button>
+        <div><small>Application preferences</small><h1>Settings</h1><p>Scanner controls, shortcuts, and diagnostics.</p></div>
       </div>
 
       <section class="settings-section">
-        <button class="accordion-header" class:open={openSettingsSection === 'shortcuts'} onclick={() => openSettings('shortcuts')}>Shortcuts</button>
+        <button class="accordion-header" class:open={openSettingsSection === 'shortcuts'} aria-expanded={openSettingsSection === 'shortcuts'} aria-controls="settings-shortcuts" onclick={() => openSettings('shortcuts')}>
+          <span class="accordion-heading"><strong>Shortcuts</strong><small>Configure keyboard and mouse shortcuts.</small></span>
+          <span class="accordion-indicator" aria-hidden="true"></span>
+        </button>
         {#if openSettingsSection === 'shortcuts'}
-          <div class="accordion-body">
+          <div class="accordion-body" id="settings-shortcuts">
             <div class="shortcut-row">
               <strong>Manual Scan</strong>
               <kbd>{capturingShortcutAction === 'manual' ? 'Press a key or mouse button...' : keybindLabel(settings.scanNowKeybind)}</kbd>
@@ -1181,17 +1453,28 @@
       </section>
 
       <section class="settings-section">
-        <button class="accordion-header" class:open={openSettingsSection === 'scan'} onclick={() => openSettings('scan')}>Scan</button>
+        <button class="accordion-header" class:open={openSettingsSection === 'scan'} aria-expanded={openSettingsSection === 'scan'} aria-controls="settings-scan" onclick={() => openSettings('scan')}>
+          <span class="accordion-heading"><strong>Scan</strong><small>Configure scanner behavior, timing and detection.</small></span>
+          <span class="accordion-indicator" aria-hidden="true"></span>
+        </button>
         {#if openSettingsSection === 'scan'}
-          <div class="accordion-body">
+          <div class="accordion-body" id="settings-scan">
             <div class="button-row">
               <input class="signature-input" aria-label="Test signature" placeholder="Test signature" bind:value={observed} onkeydown={(event) => event.key === 'Enter' && runManualMatch()} />
               <button onclick={runManualMatch}>Match Value</button>
             </div>
+            <div class="field log-path-field">
+              <label for="game-log-path">Game.log path</label>
+              <div class="button-row">
+                <input id="game-log-path" bind:value={gameLogPathInput} placeholder="Auto-discovery is active" />
+                <button onclick={saveGameLogPath}>Use path</button>
+              </div>
+              <small>{gameLogStatus.path ? `${gameLogStatus.channel ?? 'Channel'} · ${gameLogStatus.health}` : 'Select a StarCitizen folder, channel folder, or Game.log only if discovery fails.'}</small>
+            </div>
             <div class="interval-control"><span>Interval</span><div class="segment-group">{#each [1, 2, 3, 4] as seconds}<button class:active={settings.activeScanIntervalMs === seconds * 1000} onclick={() => setIntervalSeconds(seconds)}>{seconds}s</button>{/each}</div></div>
             <div class="button-row">
-              <button onclick={clearRegion} disabled={!captureRegion}>Clear Region</button>
-              <button onclick={() => refreshCapturePreview(true)} disabled={!captureRegion || capturePreviewLoading}>{capturePreviewLoading ? 'Refreshing...' : 'Refresh Preview'}</button>
+              <button class="danger-action" onclick={confirmRegionReset} disabled={!captureRegion}>Reset OCR Region</button>
+              <button onclick={showCapturePreview} disabled={!captureRegion || capturePreviewLoading}>{capturePreviewLoading ? 'Refreshing...' : 'Open Preview'}</button>
             </div>
             <div class="capture-preview-card">
               <div><strong>Capture Preview</strong>{#if captureRegion}<span>{captureRegion.width}x{captureRegion.height} saved region</span>{/if}</div>
@@ -1208,50 +1491,22 @@
       </section>
 
       <section class="settings-section">
-        <button class="accordion-header" class:open={openSettingsSection === 'overlay'} onclick={() => openSettings('overlay')}>Overlay</button>
-        {#if openSettingsSection === 'overlay'}
-          <div class="accordion-body">
-            <div class="button-row">
-              <button class:active={overlaySetupMode} onclick={toggleOverlaySetupMode}>{overlaySetupMode ? 'Lock Overlay' : 'Unlock Overlay'}</button>
-              <button onclick={resetOverlayPosition}>Reset Position</button>
-            </div>
-            <div class="appearance-grid">
-              <label>Text color <input type="color" bind:value={settings.overlayTextColor} onchange={persistSettings} /></label>
-              <label>Background <input type="color" bind:value={settings.overlayBackgroundColor} onchange={persistSettings} /></label>
-              <label>Accent <input type="color" bind:value={settings.overlayAccentColor} onchange={persistSettings} /></label>
-              <label>Opacity <strong>{Math.round(settings.overlayOpacity * 100)}%</strong><input type="range" min="0.35" max="1" step="0.05" bind:value={settings.overlayOpacity} onchange={persistSettings} /></label>
-              <label>Text size <strong>{settings.overlayFontSize}px</strong><input type="range" min="11" max="20" step="1" bind:value={settings.overlayFontSize} onchange={persistSettings} /></label>
-              <label>Result lifetime <strong>{settings.overlayResultLifetimeSeconds}s</strong><input type="range" min="5" max="120" step="5" bind:value={settings.overlayResultLifetimeSeconds} onchange={persistSettings} /></label>
-              <label class="toggle"><input type="checkbox" bind:checked={settings.overlayHighContrast} onchange={persistSettings} /><span></span> High contrast</label>
-              <label class="toggle"><input type="checkbox" bind:checked={settings.overlayCompactMode} onchange={persistSettings} /><span></span> Compact mode</label>
-              <label class="toggle"><input type="checkbox" bind:checked={settings.returnSalvageResults} onchange={applyResultSettings} /><span></span> Salvage</label>
-              <label class="toggle"><input type="checkbox" bind:checked={settings.includeFpsRocResults} onchange={applyResultSettings} /><span></span> FPS/ROC</label>
-              <label class="toggle"><input type="checkbox" bind:checked={settings.showSecondaryMaterials} onchange={applyResultSettings} /><span></span> Composition</label>
-              <label class="toggle"><input type="checkbox" bind:checked={settings.showScannedValueOnOverlay} onchange={persistSettings} /><span></span> Signature Value</label>
-              <label class="toggle"><input type="checkbox" bind:checked={settings.onlyShowSolvedResults} onchange={applyResultSettings} /><span></span> Only solved captures in overlay</label>
-            </div>
-            <div class="overlay-preview" style={`--preview-text:${settings.overlayTextColor};--preview-bg:${settings.overlayBackgroundColor};--preview-accent:${settings.overlayAccentColor};--preview-opacity:${settings.overlayOpacity};--preview-size:${settings.overlayFontSize}px`}>
-              <small>Overlay Preview</small>
-              <p>
-                {#if settings.showScannedValueOnOverlay}<strong>3840</strong><span>— {materialLabel(mockOverlayMaterials().primary, mockOverlayMaterials().secondary)}</span>
-                {:else}<span>{materialLabel(mockOverlayMaterials().primary, mockOverlayMaterials().secondary)}</span>{/if}
-              </p>
-            </div>
-          </div>
-        {/if}
-      </section>
-
-      {#if dev}
-        <section class="settings-section">
-          <button class="accordion-header" class:open={openSettingsSection === 'advanced'} onclick={() => openSettings('advanced')}>Advanced Debug</button>
+          <button class="accordion-header" class:open={openSettingsSection === 'advanced'} aria-expanded={openSettingsSection === 'advanced'} aria-controls="settings-advanced" onclick={() => openSettings('advanced')}>
+            <span class="accordion-heading"><strong>Advanced Debug</strong><small>Diagnostics, OCR and troubleshooting options.</small></span>
+            <span class="accordion-indicator" aria-hidden="true"></span>
+          </button>
           {#if openSettingsSection === 'advanced'}
-          <div class="accordion-body">
+          <div class="accordion-body" id="settings-advanced">
           <label class="field">Tolerance <input type="number" min="0" max="200" bind:value={tolerance} /></label>
           <pre>{JSON.stringify({ tesseractStatus, debugResult, ocrError, overlayError, keybindError, scannerStatus, captureRegion, lastScanSummary, lastScanTime }, null, 2)}</pre>
+          <section class="diagnostic-feed">
+            <header><div><small>Raw troubleshooting data</small><h2>Scan diagnostics</h2></div><div class="filter-group" aria-label="Filter scan results"><button class:active={historyFilter === 'all'} onclick={() => historyFilter = 'all'}>All</button><button class:active={historyFilter === 'matches'} onclick={() => historyFilter = 'matches'}>Matches</button><button class:active={historyFilter === 'issues'} onclick={() => historyFilter = 'issues'}>Issues</button></div></header>
+            {#each visibleHistory().slice(0, 12) as entry (entry.id)}<div class="history-row"><span class="status {entry.status}">{historyStatus(entry)}</span><div><strong>{historyTitle(entry)}</strong><small>{historyDetail(entry)}</small></div>{#if entry.repeatCount > 1}<b>x{entry.repeatCount}</b>{/if}</div>{/each}
+            {#if !history.length}<p class="compact-empty">No diagnostic events captured.</p>{/if}
+          </section>
           </div>
           {/if}
-        </section>
-      {/if}
+      </section>
 
       <footer class="settings-footer">
         <span>Current version: {displayVersion(appVersion)}</span>
@@ -1259,8 +1514,10 @@
         {#if updateStatus}<p class="update-message">{updateStatus}</p>{/if}
         <button class="link-button" onclick={openReleaseNotes}>Release Notes</button>
       </footer>
-    </aside>
+    </section>
   {/if}
+
+  </div>
 
   {#if releaseNotesOpen}
     <div class="modal-backdrop" role="presentation" onclick={() => releaseNotesOpen = false}></div>
