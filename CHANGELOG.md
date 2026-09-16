@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.1.0-beta.5
+
+### Added
+
+- Added independent OCR region profiles for Golem, Prospector, MOLE, and custom ships, with a persistent active profile.
+- Added per-profile overlay-position persistence, plus safe restoration and reset controls.
+- Added a location-aware Minables index and a persistent watch list for materials relevant to the current system and location.
+- Added configurable overlay text, background, accent, opacity, size, compact mode, high contrast, result lifetime, composition, and signature-value controls.
+
+### Changed
+
+- Overhauled the desktop workspace with a clearer instrumentation hierarchy, readable metadata, and a responsive sidebar treatment.
+- Refreshed the dashboard OCR, scanner, watch-list, material, and overlay-preview panels around the active ship profile.
+- Made dashboard and Settings HUD previews match the live overlay’s configured colors, opacity, accent, and text size.
+
+### Fixed
+
+- Fixed monitor-relative capture coordinates and validation for mixed-DPI, secondary, and negative-coordinate monitor layouts.
+- Fixed region and overlay-position persistence races during native-settings hydration and verify saved region state after writes.
+- Improved Game.log discovery, monitoring recovery, scan de-duplication, OCR normalization, and diagnostic reporting for unreliable scans.
+- Fixed overlay opacity so the configured value is fully applied instead of being attenuated a second time.
+
 ## v0.1.0-beta.4
 
 ### Improvements

@@ -160,7 +160,7 @@
     min-width: 172px;
     max-width: 260px;
     padding: 7px 10px 8px;
-    background: linear-gradient(90deg, color-mix(in srgb, var(--result-bg, #061019) 18%, transparent), transparent 84%);
+    background: linear-gradient(90deg, var(--result-bg, rgba(6, 16, 25, .82)), transparent 84%);
     border-top: 1px solid color-mix(in srgb, var(--result-accent, #48b9d6) 58%, transparent);
     border-left: 1px solid color-mix(in srgb, var(--result-accent, #48b9d6) 45%, transparent);
     clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 7px 100%, 0 calc(100% - 7px));
