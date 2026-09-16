@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.1.0-beta.8
+
+### Fixed
+
+- Set both lines of the sidebar utility/build footer to a consistent 9px size.
+- Fixed expanded Settings categories clipping into adjacent content; Settings now scrolls cleanly when a section exceeds the available height.
+- Removed the duplicate OCR capture preview from Settings.
+
 ## v0.1.0-beta.7
 
 ### Changed
