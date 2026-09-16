@@ -53,10 +53,11 @@ jobs:
           tagName: v__VERSION__
           releaseName: ${{ steps.release_meta.outputs.title }}
           releaseBody: |
-            SigLock v0.1.0 Beta 6 open beta build.
+            SigLock v0.1.0 Beta 7 open beta build.
 
-            This release restores the Overlay workspace HUD preview, refines the
-            dashboard's smallest labels, and updates the SigLock by Tux branding.
+            This release updates the packaged Windows taskbar icon and favicon
+            from the supplied SigLock by Tux PNG, and further refines the sidebar
+            build footer typography.
 
             See the accompanying release notes for the known Settings clipping and
             overlay background-opacity limitations.

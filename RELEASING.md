@@ -31,8 +31,8 @@ create these repository secrets:
 3. Create and push a matching tag, for example:
 
    ```powershell
-   git tag v0.1.0-beta.6
-   git push origin v0.1.0-beta.6
+   git tag v0.1.0-beta.7
+   git push origin v0.1.0-beta.7
    ```
 
 4. GitHub Actions builds a release containing the NSIS installer, installer
@@ -41,8 +41,8 @@ create these repository secrets:
 6. Run the updater manifest validation:
 
    ```powershell
-   $env:EXPECTED_VERSION="0.1.0-beta.6"
-   $env:RELEASE_TAG="v0.1.0-beta.6"
+   $env:EXPECTED_VERSION="0.1.0-beta.7"
+   $env:RELEASE_TAG="v0.1.0-beta.7"
    npm run validate:updater
    ```
 
