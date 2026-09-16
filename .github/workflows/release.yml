@@ -53,14 +53,11 @@ jobs:
           tagName: v__VERSION__
           releaseName: ${{ steps.release_meta.outputs.title }}
           releaseBody: |
-            SigLock v0.1.0 Beta 7 open beta build.
+            SigLock v0.1.0 Beta 8 open beta build.
 
-            This release updates the packaged Windows taskbar icon and favicon
-            from the supplied SigLock by Tux PNG, and further refines the sidebar
-            build footer typography.
-
-            See the accompanying release notes for the known Settings clipping and
-            overlay background-opacity limitations.
+            This release sets the sidebar utility/build footer to a consistent 9px
+            size and fixes expanded Settings categories clipping into adjacent content.
+            The duplicate OCR capture preview has been removed from Settings.
 
             Download the Windows setup executable below.
           releaseDraft: false

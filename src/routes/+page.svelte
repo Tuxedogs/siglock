@@ -1474,17 +1474,6 @@
             <div class="interval-control"><span>Interval</span><div class="segment-group">{#each [1, 2, 3, 4] as seconds}<button class:active={settings.activeScanIntervalMs === seconds * 1000} onclick={() => setIntervalSeconds(seconds)}>{seconds}s</button>{/each}</div></div>
             <div class="button-row">
               <button class="danger-action" onclick={confirmRegionReset} disabled={!captureRegion}>Reset OCR Region</button>
-              <button onclick={showCapturePreview} disabled={!captureRegion || capturePreviewLoading}>{capturePreviewLoading ? 'Refreshing...' : 'Open Preview'}</button>
-            </div>
-            <div class="capture-preview-card">
-              <div><strong>Capture Preview</strong>{#if captureRegion}<span>{captureRegion.width}x{captureRegion.height} saved region</span>{/if}</div>
-              {#if !captureRegion}
-                <p class="region-missing">Region missing — set a capture region to preview it.</p>
-              {:else if capturePreviewUrl}
-                <img class="capture-preview" src={capturePreviewUrl} alt="Live preview of the saved capture region" />
-              {:else}
-                <p>{capturePreviewError ?? 'Loading saved region preview…'}</p>
-              {/if}
             </div>
           </div>
         {/if}
