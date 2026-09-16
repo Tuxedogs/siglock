@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.0-beta.7
+
+### Changed
+
+- Replaced the packaged Windows taskbar icon, installer icon set, and web favicon with the supplied SigLock by Tux PNG.
+- Reduced the sidebar utility/build footer text by a further 3px.
+
 ## v0.1.0-beta.6
 
 ### Changed

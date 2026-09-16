@@ -110,5 +110,6 @@ h1,h2,h3,p { margin-top:0; } h1,h2,h3 { color:#dff2f6; }
 :is(.rail-footer,.rail-footer b,.drag-title>span,.connection-state,.profile-label small,.profile-bar>p,.system-selector button,.module header small,.workspace-heading small,.settings-header small,.diagnostic-feed header small,.region-entry span,.region-entry>b,.profile-region-list>div,.state-dot,.auto-control small,.scan-metrics span,.scanner-module footer>span,.overlay-dashboard footer>span,.watch-list>button,.watch-list b,.compact-empty,.finds-module>header>span,.material-results span,.material-results b,.results-empty p,.activity-summary>span,.instrument-title,.instrument-title b,.region-readout dt,.settings-header p,.accordion-heading small,.hint,.field,.interval-control,.appearance-grid label,.capture-preview-card p,.capture-preview-card span,.overlay-preview>small,.settings-footer,.filter-group button,.history-row strong,.history-row small,.status,pre) { font-size:11px; }
 :is(.eyebrow,.material-results strong,.preview-empty,.table-head,.shortcut-row strong,.release-list ul) { font-size:12px; }
 :is(.ship-selector button,.module>header button,.module>footer button,.module-copy,.region-entry strong,.scan-metrics strong,.results-empty strong,.page-intro,.table-toolbar span,.minables-watchlist,.watch-action,.accordion-heading strong) { font-size:13px; }
-.rail-footer,.rail-footer b,.module header small { font-size:9px; }
+.module header small { font-size:9px; }
+.rail-footer,.rail-footer b { font-size:6px; }
 @media(min-width:821px) { .watch-list { min-height:87px; } }
