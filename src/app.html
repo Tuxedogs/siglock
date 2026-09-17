@@ -5,9 +5,63 @@
     <link rel="icon" href="%sveltekit.assets%/favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>SigLock</title>
+    <style>
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        background: #06111d;
+      }
+
+      #siglock-startup {
+        display: grid;
+        width: 100%;
+        height: 100%;
+        place-items: center;
+        color: #d9e7ef;
+        background:
+          radial-gradient(circle at 50% 42%, rgba(71, 123, 158, 0.16), transparent 30%),
+          linear-gradient(145deg, #06111d, #081723 50%, #06111d);
+        font-family: Bahnschrift, "Arial Narrow", system-ui, sans-serif;
+      }
+
+      #siglock-startup > div {
+        display: grid;
+        justify-items: center;
+        gap: 12px;
+      }
+
+      #siglock-startup img {
+        width: 72px;
+        height: 72px;
+        object-fit: contain;
+        filter: drop-shadow(0 0 16px rgba(101, 150, 183, 0.36));
+      }
+
+      #siglock-startup strong {
+        font-size: 20px;
+        letter-spacing: -0.03em;
+      }
+
+      #siglock-startup span {
+        color: #91bed8;
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+      }
+    </style>
     %sveltekit.head%
   </head>
   <body data-sveltekit-preload-data="hover">
+    <div id="siglock-startup" role="status" aria-live="polite">
+      <div>
+        <img src="/siglock-taskbar-icon-transparent.png" alt="" />
+        <strong>SigLock</strong>
+        <span>Initializing scanner</span>
+      </div>
+    </div>
     <div style="display: contents">%sveltekit.body%</div>
   </body>
 </html>

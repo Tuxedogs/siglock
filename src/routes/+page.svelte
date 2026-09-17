@@ -1187,6 +1187,7 @@
   }
 
   onMount(async () => {
+    requestAnimationFrame(() => document.getElementById('siglock-startup')?.remove());
     document.addEventListener('keydown', captureKeybind, true);
     document.addEventListener('mousedown', captureMouseKeybind, true);
     document.addEventListener('mouseup', endMainWindowDrag, true);
@@ -1282,7 +1283,7 @@
 <main class="app-shell">
   <aside class="side-rail">
     <div class="brand-lockup">
-      <img src="/siglock-by-tux-logo.png" alt="" />
+      <img src="/siglock-taskbar-icon-transparent.png" alt="" />
       <div><strong>SigLock</strong><span>by Tux</span></div>
     </div>
     <nav aria-label="Primary navigation">

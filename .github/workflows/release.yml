@@ -53,11 +53,11 @@ jobs:
           tagName: v__VERSION__
           releaseName: ${{ steps.release_meta.outputs.title }}
           releaseBody: |
-            SigLock v0.1.0 Beta 8 open beta build.
+            SigLock v0.1.0 Beta 9 open beta build.
 
-            This release sets the sidebar utility/build footer to a consistent 9px
-            size and fixes expanded Settings categories clipping into adjacent content.
-            The duplicate OCR capture preview has been removed from Settings.
+            This release updates the sidebar and packaged application icon with the
+            supplied transparent SigLock logo and replaces the blank startup flash
+            with a branded loading screen.
 
             Download the Windows setup executable below.
           releaseDraft: false
