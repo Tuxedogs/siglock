@@ -62,6 +62,13 @@
         <span>Initializing scanner</span>
       </div>
     </div>
+    <script>
+      // The HUD is a separate Tauri window at /overlay. It must never inherit
+      // the main application's startup branding.
+      if (window.location.pathname === '/overlay') {
+        document.getElementById('siglock-startup')?.remove();
+      }
+    </script>
     <div style="display: contents">%sveltekit.body%</div>
   </body>
 </html>

@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.0-beta.10
+
+### Fixed
+
+- Restricted the branded startup screen to the main application window; the in-game HUD overlay no longer receives a logo or splash layer.
+
 ## v0.1.0-beta.9
 
 ### Fixed

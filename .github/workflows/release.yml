@@ -53,11 +53,10 @@ jobs:
           tagName: v__VERSION__
           releaseName: ${{ steps.release_meta.outputs.title }}
           releaseBody: |
-            SigLock v0.1.0 Beta 9 open beta build.
+            SigLock v0.1.0 Beta 10 open beta build.
 
-            This release updates the sidebar and packaged application icon with the
-            supplied transparent SigLock logo and replaces the blank startup flash
-            with a branded loading screen.
+            This release restricts the branded startup screen to the main
+            application window so the in-game HUD overlay remains logo-free.
 
             Download the Windows setup executable below.
           releaseDraft: false
