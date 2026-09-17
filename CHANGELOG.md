@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.0-beta.9
+
+### Fixed
+
+- Updated the sidebar and packaged application icon to use the supplied transparent SigLock logo.
+- Replaced the blank startup flash with a branded SigLock loading screen.
+
 ## v0.1.0-beta.8
 
 ### Fixed
