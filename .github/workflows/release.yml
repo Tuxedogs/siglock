@@ -53,10 +53,11 @@ jobs:
           tagName: v__VERSION__
           releaseName: ${{ steps.release_meta.outputs.title }}
           releaseBody: |
-            SigLock v0.1.0 Beta 10 open beta build.
+            SigLock v0.1.0 Beta 11 open beta build.
 
-            This release restricts the branded startup screen to the main
-            application window so the in-game HUD overlay remains logo-free.
+            This release removes the opaque startup splash from the full-screen
+            OCR region picker so the desktop remains visible while selecting a
+            capture area.
 
             Download the Windows setup executable below.
           releaseDraft: false

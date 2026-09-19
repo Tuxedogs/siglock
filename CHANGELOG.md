@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.0-beta.11
+
+### Fixed
+
+- Removed the opaque startup splash from the full-screen OCR region picker so the desktop remains visible while selecting a capture area.
+
 ## v0.1.0-beta.10
 
 ### Fixed

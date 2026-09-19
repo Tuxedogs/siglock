@@ -63,9 +63,10 @@
       </div>
     </div>
     <script>
-      // The HUD is a separate Tauri window at /overlay. It must never inherit
-      // the main application's startup branding.
-      if (window.location.pathname === '/overlay') {
+      // Startup branding belongs only to the main application window. Auxiliary
+      // transparent windows, especially the full-screen OCR region picker, must
+      // reveal the desktop immediately so users can make a selection.
+      if (window.location.pathname !== '/') {
         document.getElementById('siglock-startup')?.remove();
       }
     </script>
