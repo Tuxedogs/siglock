@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (2026-10-29)
+## v0.1.0-beta.12 (2026-10-29)
 
 ### Added
 
@@ -20,7 +20,7 @@
 
 ### Notes
 
-- These changes are committed as a source update only. No new installer, updater manifest, release tag, or published beta is created by this entry.
+- Beta 12 is distributed through the normal GitHub Releases installer and signed updater process.
 
 ## v0.1.0-beta.11
 
