@@ -1,7 +1,5 @@
 mod game_log;
 
-use base64::engine::general_purpose;
-use base64::Engine;
 use game_log::{
     candidate_logs, discover_game_log, start_monitor, stop_monitor, DiscoveryResult,
     GameLogController, GameLogControllerState, GameLogStatus, GameLogStatusState,
@@ -9,7 +7,7 @@ use game_log::{
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs::OpenOptions;
-use std::io::{Cursor, Write};
+use std::io::Write;
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -227,19 +225,6 @@ fn resolve_tesseract_executable(app: Option<&tauri::AppHandle>) -> PathBuf {
 
     // Final fallback (will likely fail at runtime, which is handled gracefully)
     PathBuf::from("tesseract")
-}
-
-/// Result of capturing a screen region for preview/debug
-#[derive(Serialize, Clone, Debug)]
-pub struct CaptureResult {
-    pub success: bool,
-    pub width: u32,
-    pub height: u32,
-    pub image_path: Option<String>,
-    pub captured_at: String,
-    pub error: Option<String>,
-    // Base64 data URL for reliable preview in dev (avoids asset protocol / scope issues)
-    pub preview_data_url: Option<String>,
 }
 
 /// Hard-coded signature index (26 materials)
@@ -655,6 +640,14 @@ fn validate_scan_region(region: &ScanRegion) -> Result<(), String> {
             "Capture region is too small ({}x{}). Keep the previous saved region or choose a larger area.",
             region.width, region.height
         ));
+    }
+    // Region picker and inline edits both use physical virtual-desktop pixels.
+    // Negative origins are valid on secondary monitors, but reject rectangles
+    // whose far edge would overflow the native coordinate space.
+    let right = i64::from(region.x) + i64::from(region.width);
+    let bottom = i64::from(region.y) + i64::from(region.height);
+    if right > i64::from(i32::MAX) || bottom > i64::from(i32::MAX) {
+        return Err("Capture coordinates exceed the physical virtual-desktop range.".to_string());
     }
     Ok(())
 }
@@ -1889,75 +1882,6 @@ fn capture_scan_region(region: &ScanRegion) -> Result<screenshots::image::RgbaIm
     capture.map_err(|e| format!("Screen capture failed: {}", e))
 }
 
-// ==================== Real Region Capture (using screenshots crate) ====================
-
-#[tauri::command]
-async fn capture_region_preview(state: State<'_, AppState>) -> Result<CaptureResult, String> {
-    let region = {
-        let s = state.lock().unwrap();
-        s.region
-            .clone()
-            .ok_or_else(|| "No region selected. Click 'Set Region' first.".to_string())?
-    };
-
-    // Validate region size
-    if region.width < 20 || region.height < 10 {
-        return Ok(CaptureResult {
-            success: false,
-            width: region.width,
-            height: region.height,
-            image_path: None,
-            captured_at: chrono::Utc::now().to_rfc3339(),
-            error: Some("Region too small for capture.".to_string()),
-            preview_data_url: None,
-        });
-    }
-
-    let capture_result = capture_scan_region(&region);
-
-    match capture_result {
-        Ok(captured_image) => {
-            // Encode the preview in memory; previews never create debug capture files.
-            let width = captured_image.width();
-            let height = captured_image.height();
-            let rgba = image::RgbaImage::from_raw(width, height, captured_image.into_raw())
-                .ok_or_else(|| "Failed to prepare capture preview.".to_string())?;
-            let dynamic = image::DynamicImage::ImageRgba8(rgba);
-            let mut encoded = Cursor::new(Vec::new());
-            dynamic
-                .write_to(&mut encoded, image::ImageFormat::Png)
-                .map_err(|e| format!("Failed to encode capture preview: {}", e))?;
-
-            let preview_data_url = Some(format!(
-                "data:image/png;base64,{}",
-                general_purpose::STANDARD.encode(encoded.into_inner())
-            ));
-
-            Ok(CaptureResult {
-                success: true,
-                width,
-                height,
-                image_path: None,
-                captured_at: chrono::Utc::now().to_rfc3339(),
-                error: None,
-                preview_data_url,
-            })
-        }
-        Err(e) => Ok(CaptureResult {
-            success: false,
-            width: region.width,
-            height: region.height,
-            image_path: None,
-            captured_at: chrono::Utc::now().to_rfc3339(),
-            error: Some(format!(
-                "Capture failed: {}. Check region coordinates and scaling.",
-                e
-            )),
-            preview_data_url: None,
-        }),
-    }
-}
-
 // ==================== Active Scan Timer (single controlled task) ====================
 
 /// Starts the single active scan timer task if not already running.
@@ -2411,7 +2335,6 @@ pub fn run() {
             clear_crop_region,
             scan_selected_region,
             open_region_picker,
-            capture_region_preview,
             check_tesseract
         ])
         .setup(move |app| {

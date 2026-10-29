@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased (2026-10-29)
+
+### Added
+
+- Persist up to 200 recent OCR detection events across restarts, including outcomes, timestamps, rock counts, and consolidated repeat counts.
+- Add inline capture-coordinate editing for saved region profiles with keyboard save/cancel controls and confirmation before destructive region actions.
+
+### Changed
+
+- Consolidate region management into the dashboard OCR Capture module and remove the separate Regions navigation destination.
+- Reorganize dashboard panels around Current Materials, scanning, watch list, and overlay controls; make dense detection history scrollable and improve smaller-screen layouts.
+- Consolidate repeated stationary OCR reads over a 15-second window instead of 3 seconds, reducing duplicate feed entries.
+
+### Fixed
+
+- Validate edited crop bounds against physical virtual-desktop coordinate limits, including monitor layouts with negative origins.
+- Remove the unused persistent capture-preview UI, command, and related image encoding.
+
+### Notes
+
+- These changes are committed as a source update only. No new installer, updater manifest, release tag, or published beta is created by this entry.
+
 ## v0.1.0-beta.11
 
 ### Fixed

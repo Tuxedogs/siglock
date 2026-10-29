@@ -18,12 +18,13 @@
     type ScanResult,
   } from '$lib/data/rockCompositions';
   import { buildScanResultKey, isDuplicateResult, normalizeMaterial } from '$lib/scanDedupe';
+  import { DETECTION_HISTORY_LIMIT, loadDetectionHistory, saveDetectionHistory, type DetectionEvent } from '$lib/detectionHistory';
   import { DEFAULT_SETTINGS, loadSettings, saveSettings, type SigLockSettings, type SystemFilter } from '$lib/settings';
 
   type Trigger = 'Manual' | 'Active';
   type ScanStatus = 'matched' | 'no match' | 'invalid' | 'failed' | 'skipped';
   type ShortcutAction = 'manual' | 'auto';
-  type AppPage = 'dashboard' | 'regions' | 'minables' | 'overlay' | 'settings';
+  type AppPage = 'dashboard' | 'minables' | 'overlay' | 'settings';
   type ShipId = 'golem' | 'prospector' | 'mole';
   type ScanRegion = { x: number; y: number; width: number; height: number };
   type RegionProfile = {
@@ -48,25 +49,16 @@
     playerHandle: string | null;
     lastLineAt: string | null;
   };
-  type HistoryEntry = {
-    id: number;
-    timestamp: string;
-    trigger: Trigger;
-    material: string;
-    rawValue: string;
+  type HistoryEntry = DetectionEvent & {
     parsedNumber: number | null;
     normalizedAttemptValue: string | null;
     matchedValue: number | null;
     nearestCandidateMaterial: string | null;
     nearestCandidateValue: number | null;
     delta: number | null;
-    rockCount: number | null;
     confidence: number | null;
     otherCandidateMaterials: string[];
     compositionStatus: CompositionStatus;
-    status: ScanStatus;
-    durationMs: number;
-    repeatCount: number;
   };
   type OverlayMatch = {
     key: string;
@@ -85,7 +77,7 @@
   type LastAcceptedScan = {
     key: string;
     acceptedAt: number;
-    historyId: number;
+    historyId: string;
     overlayKeys: string[];
   };
   type ReleaseNoteVersion = {
@@ -139,8 +131,6 @@
   let capturingShortcutAction = $state<ShortcutAction | null>(null);
   let keybindError = $state<string | null>(null);
   let historyFilter = $state<'all' | 'matches' | 'issues'>('all');
-  let capturePreviewUrl = $state<string | null>(null);
-  let capturePreviewError = $state<string | null>(null);
   let debugResult = $state<any>(null);
   let overlayError = $state<string | null>(null);
   let appVersion = $state<string | null>(null);
@@ -155,8 +145,9 @@
   let openSettingsSection = $state<'shortcuts' | 'scan' | 'advanced'>('shortcuts');
   let unlisteners: UnlistenFn[] = [];
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
-  let capturePreviewLoading = $state(false);
-  let lastCapturePreviewAt = 0;
+  let historySaveTimer: ReturnType<typeof setTimeout> | null = null;
+  let relativeClock = $state(Date.now());
+  let relativeClockTimer: ReturnType<typeof setTimeout> | null = null;
   let scannerStatusBeforeRegionPicker = 'Ready';
   let mainWindowDragActive = false;
   let gameLogStatus = $state<GameLogStatus>({
@@ -168,6 +159,11 @@
   let currentPage = $state<AppPage>('dashboard');
   let minableSearch = $state('');
   let newRegionDraft = $state(false);
+  let pendingRegionAction = $state<{ kind: 'delete' | 'reset'; profile: RegionProfile } | null>(null);
+  let coordinateDraft = $state<ScanRegion>({ x: 0, y: 0, width: 0, height: 0 });
+  let coordinateEditRegionId = $state<string | null>(null);
+  let coordinateSaving = $state(false);
+  let firstTimeRegionHint = $state(false);
 
   function isValidRegion(region: unknown): region is ScanRegion {
     if (!region || typeof region !== 'object') return false;
@@ -178,6 +174,16 @@
       && Number.isInteger(candidate.height)
       && (candidate.width ?? 0) >= 20
       && (candidate.height ?? 0) >= 10;
+  }
+
+  function isPhysicalRegion(region: unknown): region is ScanRegion {
+    if (!isValidRegion(region)) return false;
+    const candidate = region as ScanRegion;
+    // Coordinates are physical virtual-desktop pixels. Negative origins are valid
+    // on displays arranged left/above the primary monitor, but the rectangle must
+    // still fit in the native signed coordinate range.
+    return candidate.x + candidate.width <= 2_147_483_647
+      && candidate.y + candidate.height <= 2_147_483_647;
   }
 
   function persistSettings() {
@@ -191,6 +197,22 @@
         overlayError = `Overlay settings update failed: ${String(error)}`;
       }
     }, 150);
+  }
+
+  function persistHistory() {
+    if (historySaveTimer) clearTimeout(historySaveTimer);
+    historySaveTimer = setTimeout(() => {
+      void saveDetectionHistory(history).catch((error) => console.warn('[SigLock] could not save detection history', error));
+    }, 250);
+  }
+
+  function hydrateHistory(events: DetectionEvent[]) {
+    history = events.map((entry) => ({
+      ...entry,
+      parsedNumber: null, normalizedAttemptValue: null, matchedValue: null,
+      nearestCandidateMaterial: null, nearestCandidateValue: null, delta: null,
+      confidence: null, otherCandidateMaterials: [], compositionStatus: 'unavailable' as const,
+    }));
   }
 
   function matchOptions() {
@@ -217,6 +239,7 @@
     regionProfiles = snapshot.profiles;
     const region = activeRegionProfile().scanRegion;
     captureRegion = isValidRegion(region) ? region : null;
+    if (captureRegion) coordinateDraft = { ...captureRegion };
   }
 
   function isWatched(material: string) {
@@ -323,6 +346,7 @@
       ? { ...match, updatedAt, repeatCount: match.repeatCount + 1 }
       : match);
     void publishOverlayMatches();
+    persistHistory();
   }
 
   function addHistory(entry: Omit<HistoryEntry, 'id' | 'repeatCount'>) {
@@ -332,8 +356,9 @@
     if (first && signature === firstSignature) {
       history = [{ ...first, timestamp: entry.timestamp, trigger: entry.trigger, durationMs: entry.durationMs, repeatCount: first.repeatCount + 1 }, ...history.slice(1)];
     } else {
-      history = [{ ...entry, id: Date.now() + Math.random(), repeatCount: 1 }, ...history].slice(0, settings.rollingHistoryLimit);
+      history = [{ ...entry, id: crypto.randomUUID(), repeatCount: 1 }, ...history].slice(0, DETECTION_HISTORY_LIMIT);
     }
+    persistHistory();
   }
 
   function runManualMatch() {
@@ -372,8 +397,8 @@
     try {
       applyRegionSnapshot(await invoke<RegionProfilesSnapshot>('set_active_region', { regionId }));
       newRegionDraft = false;
-      capturePreviewUrl = null;
-      capturePreviewError = null;
+      firstTimeRegionHint = false;
+      coordinateEditRegionId = null;
       matches = [];
       scannerStatus = captureRegion
         ? `${activeRegionProfile().name} capture loaded`
@@ -388,22 +413,106 @@
       applyRegionSnapshot(await invoke<RegionProfilesSnapshot>('create_region', { name: newRegionName }));
       newRegionName = '';
       newRegionDraft = false;
-      capturePreviewUrl = null;
+      firstTimeRegionHint = true;
       scannerStatus = `${activeRegionProfile().name} created; set its OCR bounds.`;
     } catch (error) {
       scannerStatus = `Region creation failed: ${String(error)}`;
     }
   }
 
-  async function deleteActiveRegion() {
-    const profile = activeRegionProfile();
+  async function deleteRegion(profile: RegionProfile) {
     if (!profile || profile.builtIn) return;
     try {
       applyRegionSnapshot(await invoke<RegionProfilesSnapshot>('delete_region', { regionId: profile.id }));
-      capturePreviewUrl = null;
       scannerStatus = `${profile.name} deleted.`;
     } catch (error) {
       scannerStatus = `Region deletion failed: ${String(error)}`;
+    }
+  }
+
+  function beginNewRegion() {
+    newRegionDraft = true;
+    newRegionName = '';
+    firstTimeRegionHint = false;
+  }
+
+  function confirmNewRegion(event: KeyboardEvent | MouseEvent) {
+    if (event instanceof KeyboardEvent && event.key !== 'Enter' && event.key !== 'Tab') return;
+    if (!newRegionName.trim()) return;
+    event.preventDefault();
+    void createCustomRegion();
+  }
+
+  function beginRegionAction(kind: 'delete' | 'reset', profile = activeRegionProfile()) {
+    pendingRegionAction = { kind, profile };
+  }
+
+  async function completeRegionAction() {
+    const action = pendingRegionAction;
+    pendingRegionAction = null;
+    if (!action) return;
+    if (action.kind === 'delete') {
+      await deleteRegion(action.profile);
+      return;
+    }
+    await clearRegion();
+    scannerStatus = `${action.profile.name} OCR capture region cleared; select replacement bounds.`;
+    await setRegion();
+  }
+
+  async function selectOrResetRegion(profile: RegionProfile) {
+    if (profile.id !== activeRegionId) await switchRegion(profile.id);
+    const selected = profile.id === activeRegionId ? profile : regionProfiles.find((item) => item.id === profile.id) ?? profile;
+    if (selected.scanRegion) {
+      beginRegionAction('reset', selected);
+    } else {
+      firstTimeRegionHint = false;
+      await setRegion();
+    }
+  }
+
+  async function beginCoordinateEdit(profile: RegionProfile) {
+    if (!profile.scanRegion) return;
+    if (profile.id !== activeRegionId) await switchRegion(profile.id);
+    const selected = regionProfiles.find((item) => item.id === profile.id);
+    if (!selected?.scanRegion) return;
+    coordinateDraft = { ...selected.scanRegion };
+    coordinateEditRegionId = profile.id;
+  }
+
+  function cancelCoordinateEdit() {
+    coordinateEditRegionId = null;
+    coordinateDraft = captureRegion ? { ...captureRegion } : { x: 0, y: 0, width: 0, height: 0 };
+  }
+
+  async function commitCoordinateEdit() {
+    if (!coordinateEditRegionId || coordinateSaving) return;
+    const next = { ...coordinateDraft };
+    if (!isPhysicalRegion(next)) {
+      scannerStatus = 'Coordinates must be physical pixels with a capture area at least 20 × 10.';
+      return;
+    }
+    coordinateSaving = true;
+    try {
+      await invoke('set_crop_region', { region: next });
+      captureRegion = next;
+      regionProfiles = regionProfiles.map((profile) => profile.id === activeRegionId ? { ...profile, scanRegion: next } : profile);
+      coordinateEditRegionId = null;
+      scannerStatus = 'Capture coordinates updated.';
+    } catch (error) {
+      scannerStatus = `Coordinate update failed: ${String(error)}`;
+    } finally {
+      coordinateSaving = false;
+    }
+  }
+
+  function handleCoordinateKeydown(event: KeyboardEvent) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      void commitCoordinateEdit();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      cancelCoordinateEdit();
     }
   }
 
@@ -866,6 +975,20 @@
     return entry.material;
   }
 
+  function relativeTime(timestamp: string) {
+    const seconds = Math.max(0, Math.floor((relativeClock - new Date(timestamp).getTime()) / 1000));
+    if (seconds < 60) return `${seconds}s ago`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    return `${hours}h ago`;
+  }
+
+  function refreshRelativeTimes() {
+    relativeClock = Date.now();
+    relativeClockTimer = setTimeout(refreshRelativeTimes, 1000);
+  }
+
   function historyStatus(entry: HistoryEntry) {
     if (entry.status === 'failed') return 'Issue';
     if (entry.status === 'invalid') return 'Invalid Number';
@@ -914,21 +1037,6 @@
 
   function regionSize() {
     return captureRegion ? `${captureRegion.width}x${captureRegion.height}` : null;
-  }
-
-  function displayedCaptureRegion() {
-    return newRegionDraft ? null : captureRegion;
-  }
-
-  function regionSummary() {
-    const size = regionSize();
-    if (!regionLoadComplete) return { value: 'Loading', detail: 'Checking saved region', tone: 'neutral', action: 'Set Region' };
-    if (captureRegion && size) {
-      const [width, height] = size.split('x').map((value) => Number.parseInt(value, 10));
-      if (!width || !height) return { value: 'Invalid', detail: size, tone: 'danger', action: 'Fix Region' };
-      return { value: 'Ready', detail: size, tone: 'good', action: 'Change Region' };
-    }
-    return { value: 'Missing', detail: 'No capture region', tone: 'warning', action: 'Set Region' };
   }
 
   function setIntervalSeconds(seconds: number) {
@@ -997,63 +1105,11 @@
     await invoke('clear_crop_region');
     captureRegion = null;
     regionProfiles = regionProfiles.map((profile) => profile.id === activeRegionId ? { ...profile, scanRegion: null } : profile);
-    capturePreviewUrl = null;
-    capturePreviewError = null;
     regionLoadComplete = true;
-  }
-
-  async function refreshCapturePreview(force = false) {
-    if (!captureRegion) {
-      capturePreviewUrl = null;
-      capturePreviewError = null;
-      return;
-    }
-    if (capturePreviewLoading || (!force && Date.now() - lastCapturePreviewAt < 500)) return;
-    capturePreviewLoading = true;
-    try {
-      const result: any = await invoke('capture_region_preview');
-      capturePreviewUrl = result?.preview_data_url ?? null;
-      capturePreviewError = result?.success ? null : (result?.error || 'Capture unavailable');
-      lastCapturePreviewAt = Date.now();
-    } catch (error) {
-      capturePreviewError = `Capture unavailable: ${String(error)}`;
-    } finally {
-      capturePreviewLoading = false;
-    }
-  }
-
-  function openSettingsPane() {
-    currentPage = 'settings';
-    void refreshCapturePreview();
-  }
-
-  async function confirmRegionReset() {
-    if (!captureRegion) return;
-    if (!window.confirm(`Clear the OCR capture region for ${activeRegionProfile().name}? This removes its saved bounds and live preview. You can define it again at any time.`)) return;
-    try {
-      await clearRegion();
-      scannerStatus = `${activeRegionProfile().name} OCR capture region cleared.`;
-    } catch (error) {
-      scannerStatus = `Region reset failed: ${String(error)}`;
-    }
   }
 
   function navigatePage(page: AppPage) {
     currentPage = page;
-    if (page === 'regions' || page === 'settings') void refreshCapturePreview();
-  }
-
-  function beginNewRegion() {
-    currentPage = 'regions';
-    newRegionDraft = true;
-    newRegionName = '';
-    capturePreviewUrl = null;
-    capturePreviewError = null;
-  }
-
-  async function showCapturePreview() {
-    currentPage = 'regions';
-    await refreshCapturePreview(true);
   }
 
   function openSettings(section: typeof openSettingsSection) {
@@ -1194,15 +1250,16 @@
     document.addEventListener('mouseleave', endMainWindowDrag, true);
     document.addEventListener('visibilitychange', endMainWindowDragWhenHidden);
     window.addEventListener('blur', endMainWindowDrag);
+    refreshRelativeTimes();
     unlisteners.push(await listen<ScanRegion>('crop-region-updated', (event) => {
       if (isValidRegion(event.payload)) {
         captureRegion = event.payload;
+        coordinateDraft = { ...event.payload };
         regionProfiles = regionProfiles.map((profile) => profile.id === activeRegionId
           ? { ...profile, scanRegion: event.payload }
           : profile);
         regionLoadComplete = true;
         scannerStatus = 'Capture region saved';
-        if (currentPage === 'regions' || currentPage === 'settings') void refreshCapturePreview();
       }
     }));
     unlisteners.push(await listen<GameLogStatus>('game-log-status-updated', (event) => {
@@ -1216,6 +1273,7 @@
     try {
       appVersion = await getVersion();
       settings = await loadSettings();
+      hydrateHistory(await loadDetectionHistory());
       if (settings.scanNowKeybind === settings.toggleAutoScanKeybind) {
         settings.toggleAutoScanKeybind = DEFAULT_SETTINGS.toggleAutoScanKeybind;
         await saveSettings({ ...settings });
@@ -1275,6 +1333,8 @@
     window.removeEventListener('blur', endMainWindowDrag);
     unlisteners.forEach((unlisten) => unlisten());
     if (saveTimer) clearTimeout(saveTimer);
+    if (historySaveTimer) clearTimeout(historySaveTimer);
+    if (relativeClockTimer) clearTimeout(relativeClockTimer);
   });
 </script>
 
@@ -1288,7 +1348,7 @@
     </div>
     <nav aria-label="Primary navigation">
       {#each [
-        ['dashboard', '⌂', 'Dashboard'], ['overlay', '▣', 'Overlay'], ['regions', '⌖', 'Regions'],
+        ['dashboard', '⌂', 'Dashboard'], ['overlay', '▣', 'Overlay'],
         ['minables', '◈', 'Minables'], ['settings', '⚙', 'Settings'],
       ] as item}
         <button class:active={currentPage === item[0]} onclick={() => navigatePage(item[0] as AppPage)}>
@@ -1327,25 +1387,47 @@
 
   {#if currentPage === 'dashboard'}
   <section class="dashboard-grid">
+    <article class="module finds-module">
+      <header><div><small>OCR capture</small><h2>Current materials</h2></div><span>{operationalHistory().length} recent events</span></header>
+      <div class:populated={operationalHistory().length > 0} class="material-results detection-history">
+        {#if operationalHistory().length}
+          {#each operationalHistory() as entry (entry.id)}<div><i class:issue={entry.status !== 'matched'}></i><strong>{historyTitle(entry)}</strong><span>{entry.rockCount ? `${entry.rockCount} rock${entry.rockCount === 1 ? '' : 's'}` : historyStatus(entry)}</span><b title={new Date(entry.timestamp).toLocaleString()}>{relativeTime(entry.timestamp)}{entry.repeatCount > 1 ? ` · ×${entry.repeatCount}` : ''}</b></div>{/each}
+        {:else}<div class="results-empty"><strong>Waiting for a recognized signature</strong><p>Detections appear here; routine OCR polls stay consolidated.</p></div>{/if}
+      </div>
+      <footer class="activity-summary"><span>{history.length} retained events</span>{#if routineReadCount()}<span>{routineReadCount()} routine reads consolidated</span>{/if}<button onclick={() => { openSettings('advanced'); navigatePage('settings'); }}>Diagnostics →</button></footer>
+    </article>
+
     <article class="module region-module">
-      <header><div><small>OCR capture</small><h2>Region management</h2></div><button onclick={beginNewRegion}>New Region</button></header>
-      <p class="module-copy">Screen area scanned for {activeRegionProfile().name} signatures.</p>
-      <div class:active={!!captureRegion} class="region-entry">
-        <i></i><div><strong>{activeRegionProfile().name} signature readout</strong><span>{captureRegion ? `x ${captureRegion.x} · y ${captureRegion.y} · ${captureRegion.width} × ${captureRegion.height}` : 'No capture area configured'}</span></div><b>{captureRegion ? 'Active' : 'Missing'}</b>
-      </div>
-      <div class="profile-region-list">
+      <header><div><small>OCR capture</small><h2>Region management</h2></div><div class="region-header-actions"><button onclick={beginNewRegion}>New Region</button></div></header>
+      <div class="profile-region-list region-manager">
         {#each regionProfiles as profile}
-          {#if profile.id !== activeRegionId}<div><i class:configured={!!profile.scanRegion}></i><span>{profile.name}</span><b>{profile.scanRegion ? 'Configured' : 'Not set'}</b></div>{/if}
+          <div class:active={profile.id === activeRegionId} class="region-manager-row">
+            <button class="region-activate" onclick={() => switchRegion(profile.id)} title={`Activate ${profile.name} region`} aria-label={`Activate ${profile.name} region`}><i class:configured={!!profile.scanRegion}></i><span class="region-copy"><strong>{profile.name}</strong></span></button>
+            {#if coordinateEditRegionId === profile.id && profile.id === activeRegionId}
+              <div class="coordinate-inline-editor" aria-label={`${profile.name} physical capture coordinates`}>
+                <label>X<input aria-label="X coordinate" type="number" bind:value={coordinateDraft.x} onkeydown={handleCoordinateKeydown} onblur={() => void commitCoordinateEdit()} /></label>
+                <label>Y<input aria-label="Y coordinate" type="number" bind:value={coordinateDraft.y} onkeydown={handleCoordinateKeydown} onblur={() => void commitCoordinateEdit()} /></label>
+                <label>W<input aria-label="Width" type="number" min="20" bind:value={coordinateDraft.width} onkeydown={handleCoordinateKeydown} onblur={() => void commitCoordinateEdit()} /></label>
+                <label>H<input aria-label="Height" type="number" min="10" bind:value={coordinateDraft.height} onkeydown={handleCoordinateKeydown} onblur={() => void commitCoordinateEdit()} /></label>
+              </div>
+            {:else if profile.scanRegion}
+              <button class="coordinate-readout" title={`Edit ${profile.name} physical capture coordinates`} aria-label={`Edit ${profile.name} physical capture coordinates`} onclick={(event) => { event.stopPropagation(); void beginCoordinateEdit(profile); }}>x {profile.scanRegion.x} · y {profile.scanRegion.y} · {profile.scanRegion.width} × {profile.scanRegion.height}</button>
+            {:else}
+              <span class="coordinate-subtitle">No capture area configured</span>
+            {/if}
+            <div class="region-row-actions"><b>{profile.id === activeRegionId ? 'Active' : profile.scanRegion ? 'Configured' : 'Not set'}</b><button class="icon-action" title={profile.scanRegion ? `Reset ${profile.name} capture region` : `Set ${profile.name} capture region`} aria-label={profile.scanRegion ? `Reset ${profile.name} capture region` : `Set ${profile.name} capture region`} onclick={(event) => { event.stopPropagation(); void selectOrResetRegion(profile); }}>▭</button>{#if !profile.builtIn}<button class="icon-action danger-action" title={`Delete ${profile.name} custom region`} aria-label={`Delete ${profile.name} custom region`} onclick={(event) => { event.stopPropagation(); beginRegionAction('delete', profile); }}>×</button>{/if}</div>
+          </div>
         {/each}
+        {#if newRegionDraft}<div class="region-manager-row region-new-row"><input aria-label="New region name" maxlength="40" placeholder="Name this region" bind:value={newRegionName} onkeydown={confirmNewRegion} /><button class="icon-action" aria-label="Save new region" title="Save new region" onclick={confirmNewRegion}>✓</button></div>{/if}
       </div>
-      <footer><button onclick={setRegion} disabled={!captureRegion}>Edit</button><button onclick={showCapturePreview} disabled={!captureRegion}>Capture preview</button><button class="danger-action" onclick={confirmRegionReset} disabled={!captureRegion}>Reset OCR region</button></footer>
+      {#if firstTimeRegionHint}<p class="region-first-time-hint">Use the rectangle beside {activeRegionProfile().name} to select its first capture area.</p>{/if}
     </article>
 
     <article class="module scanner-module">
       <header><div><h2>Scanner state</h2></div><span class="state-dot {scannerSummary().tone}">{scannerSummary().value}</span></header>
       <div class="auto-control"><div class="scan-orbit" class:running={activeScanOn}><span></span></div><div><small>Auto-Scan</small><strong>{activeScanOn ? 'ON' : 'OFF'}</strong></div><button role="switch" aria-label="Toggle Auto-Scan" aria-checked={activeScanOn} class:active={activeScanOn} onclick={toggleActiveScan}><i></i></button></div>
       <div class="scan-metrics"><div><strong>{settings.activeScanIntervalMs / 1000}s</strong><span>Interval</span></div><div><strong>{currentFinds().length}</strong><span>Current finds</span></div><div><strong>{lastScanSummaryCard().value}</strong><span>Last result</span></div></div>
-      <footer><button class="primary" onclick={() => performScan('Manual')} disabled={isScanning || !captureRegion}>{isScanning ? 'Scanning…' : 'Scan now'}</button><span class:visible={overlayVisible}><i></i>HUD {overlayVisible ? 'visible' : 'hidden'}</span></footer>
+      <footer><span class:visible={overlayVisible}><i></i>HUD {overlayVisible ? 'visible' : 'hidden'}</span></footer>
     </article>
 
     <article class="module watch-module">
@@ -1356,16 +1438,6 @@
       </div>
     </article>
 
-    <article class="module finds-module">
-      <header><div><h2>Current materials</h2></div><span>{currentFinds().length} detected</span></header>
-      <div class="material-results">
-        {#if currentFinds().length}
-          {#each currentFinds().slice(0, 5) as match}<div><i></i><strong>{materialLabel(match.material)}</strong><span>{match.rockCount} rock{match.rockCount === 1 ? '' : 's'}</span><b>{match.valueLabel ?? match.detailLabel ?? 'Matched'}</b></div>{/each}
-        {:else}<div class="results-empty"><span aria-hidden="true">◇</span><strong>Waiting for a recognized signature</strong><p>Matched materials appear here; routine invalid OCR reads stay out of the way.</p></div>{/if}
-      </div>
-      <footer class="activity-summary"><span>{operationalHistory().length} significant events</span>{#if routineReadCount()}<span>{routineReadCount()} routine misses consolidated</span>{/if}<button onclick={() => { openSettings('advanced'); navigatePage('settings'); }}>Diagnostics →</button></footer>
-    </article>
-
     <article class="module overlay-dashboard">
       <header><div><h2>Overlay preview</h2></div><button onclick={() => navigatePage('overlay')}>Configure overlay</button></header>
       <div class="overlay-stage" style={`--preview-text:${settings.overlayTextColor};--preview-bg:${settings.overlayBackgroundColor};--preview-accent:${settings.overlayAccentColor};--preview-opacity:${settings.overlayOpacity};--preview-size:${settings.overlayFontSize}px`}>
@@ -1374,26 +1446,6 @@
       <footer><span class:visible={overlayVisible}><i></i>{overlayVisible ? 'Visible in game' : 'Hidden'}</span><button onclick={toggleOverlay}>{overlayVisible ? 'Hide HUD' : 'Show HUD'}</button></footer>
     </article>
   </section>
-  {:else if currentPage === 'regions'}
-    <section class="workspace-page regions-workspace">
-      <header class="workspace-heading"><div><small>Capture geometry</small><h1>{newRegionDraft ? 'New region' : activeRegionProfile().name}</h1></div><span class="eyebrow">{newRegionDraft ? 'Not saved' : regionSummary().value}</span></header>
-      <div class="region-create-row"><input aria-label="Region name" maxlength="40" placeholder="Name this new region" bind:value={newRegionName} /><button onclick={createCustomRegion} disabled={!newRegionName.trim()}>{newRegionDraft ? 'Save new region' : 'Add region'}</button><button class="danger-action" onclick={deleteActiveRegion} disabled={newRegionDraft || activeRegionProfile().builtIn}>Delete selected</button></div>
-      <div class="region-layout">
-        <section class="instrument-panel region-instrument">
-          <div class="instrument-title"><span>Saved region</span><b>{displayedCaptureRegion() ? `${displayedCaptureRegion()!.width} × ${displayedCaptureRegion()!.height}` : 'Not configured'}</b></div>
-          <div class="region-readout">
-            {#if displayedCaptureRegion()}
-              <dl><div><dt>X</dt><dd>{displayedCaptureRegion()!.x}</dd></div><div><dt>Y</dt><dd>{displayedCaptureRegion()!.y}</dd></div><div><dt>Width</dt><dd>{displayedCaptureRegion()!.width}</dd></div><div><dt>Height</dt><dd>{displayedCaptureRegion()!.height}</dd></div></dl>
-            {:else}<p>{newRegionDraft ? 'Save a name to begin a clean OCR capture region.' : 'Select the scan-number area for this OCR region.'}</p>{/if}
-          </div>
-          <div class="button-row"><button class="primary" onclick={setRegion} disabled={newRegionDraft}>{captureRegion ? 'Edit region' : 'Set region'}</button><button class="danger-action" onclick={confirmRegionReset} disabled={!captureRegion || newRegionDraft}>Reset OCR region</button><button onclick={() => refreshCapturePreview(true)} disabled={!captureRegion || newRegionDraft}>Refresh preview</button></div>
-        </section>
-        <section class="instrument-panel preview-instrument">
-          <div class="instrument-title"><span>Live crop</span><b>{capturePreviewError ?? 'OCR input'}</b></div>
-          {#if capturePreviewUrl}<img class="capture-preview large" src={capturePreviewUrl} alt="Live preview of the active ship capture region" />{:else}<div class="preview-empty">{displayedCaptureRegion() ? 'Refresh to inspect the current crop.' : newRegionDraft ? 'No capture region has been created yet.' : 'No region stored for this profile.'}</div>{/if}
-        </section>
-      </div>
-    </section>
   {:else if currentPage === 'minables'}
     <section class="workspace-page">
       <header class="workspace-heading"><div><small>Canonical signature reference</small><h1>Minables</h1></div><span class="eyebrow">{gameLogStatus.currentLocation ? locationLabel(gameLogStatus.currentLocation) : 'Location unknown'}</span></header>
@@ -1473,9 +1525,6 @@
               <small>{gameLogStatus.path ? `${gameLogStatus.channel ?? 'Channel'} · ${gameLogStatus.health}` : 'Select a StarCitizen folder, channel folder, or Game.log only if discovery fails.'}</small>
             </div>
             <div class="interval-control"><span>Interval</span><div class="segment-group">{#each [1, 2, 3, 4] as seconds}<button class:active={settings.activeScanIntervalMs === seconds * 1000} onclick={() => setIntervalSeconds(seconds)}>{seconds}s</button>{/each}</div></div>
-            <div class="button-row">
-              <button class="danger-action" onclick={confirmRegionReset} disabled={!captureRegion}>Reset OCR Region</button>
-            </div>
           </div>
         {/if}
       </section>
@@ -1547,6 +1596,15 @@
           <button onclick={openGitHubReleases}>GitHub Releases</button>
         </div>
       {/if}
+    </div>
+  {/if}
+
+  {#if pendingRegionAction}
+    <div class="modal-backdrop" role="presentation" onclick={() => pendingRegionAction = null}></div>
+    <div class="confirmation-popover" role="dialog" aria-modal="true" aria-labelledby="region-confirmation-title">
+      <h2 id="region-confirmation-title">{pendingRegionAction.kind === 'delete' ? `Delete ${pendingRegionAction.profile.name}?` : `Reset ${pendingRegionAction.profile.name}?`}</h2>
+      <p>{pendingRegionAction.kind === 'delete' ? 'This removes the custom preset and its saved capture region. This cannot be undone.' : 'This clears the saved capture bounds. The preset remains available and you can select a new area immediately.'}</p>
+      <div><button onclick={() => pendingRegionAction = null}>Cancel</button><button class="danger-action" onclick={() => void completeRegionAction()}>{pendingRegionAction.kind === 'delete' ? 'Delete region' : 'Reset region'}</button></div>
     </div>
   {/if}
 </main>

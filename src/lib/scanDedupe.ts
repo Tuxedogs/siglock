@@ -1,4 +1,6 @@
-export const DUPLICATE_WINDOW_MS = 3000;
+// OCR can report the same stationary readout every second. Treat a sustained read
+// as one detection event until it has been stable for a short, human-scale window.
+export const DUPLICATE_WINDOW_MS = 15_000;
 
 type MatchIdentity = {
   material: string;
